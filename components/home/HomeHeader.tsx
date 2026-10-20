@@ -1,4 +1,6 @@
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { router } from "expo-router";
+
 import { styles } from "./home.styles";
 
 export function HomeHeader() {
@@ -18,7 +20,24 @@ export function HomeHeader() {
           <Text style={styles.brandName}>sprout</Text>
         </View>
 
-        <Text style={styles.date}>{dateLabel}</Text>
+        <View style={styles.headerActions}>
+          <Text style={styles.date}>{dateLabel}</Text>
+
+          {/* Keep account preferences reachable from the dashboard. */}
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Profile, account preferences"
+            hitSlop={12}
+            onPress={() => router.push("/profile")}
+            style={({ pressed }) => [
+              styles.profileLink,
+              pressed && styles.profileLinkPressed,
+            ]}
+            testID="home-profile-link"
+          >
+            <Text style={styles.profileLinkText}>Profile</Text>
+          </Pressable>
+        </View>
       </View>
 
       <Text style={styles.heading}>A fresh perspective.</Text>

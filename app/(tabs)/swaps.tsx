@@ -1,171 +1,213 @@
+/**
+ * Swaps tab: suggested / saved / dismissed lists with per-card
+ * save/dismiss/restore and rollback. No bulk restore — dismissed cards are
+ * restored individually.
+ *
+ * Data, optimistic updates, and rollback come from useSwaps (real server
+ * reads only — no mocks). This file owns presentation only. Cards render
+ * through a virtualized FlatList so long saved/dismissed lists are not all
+ * mounted at once; the themed header, tabs, states, and footer live in the
+ * list's header/empty/footer slots.
+ */
+
 import { useState } from "react";
 import {
+  ActivityIndicator,
+  FlatList,
   Pressable,
-  ScrollView,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useSwaps } from "../../hooks/useSwaps";
 import { SwapCard } from "../../components/swaps/SwapCard";
-import { colors } from "../../constants/app-theme";
-import { mockSwaps } from "../../data/mock-swaps";
+import { colors, radii } from "../../constants/app-theme";
+import type { SwapTab } from "../../types/swaps";
 
-type SwapTab = "suggested" | "saved";
+const TABS: { id: SwapTab; label: string }[] = [
+  { id: "suggested", label: "Suggested" },
+  { id: "saved", label: "Saved" },
+  { id: "dismissed", label: "Dismissed" },
+];
+
+const EMPTY_COPY: Record<SwapTab, { title: string; description: string }> = {
+  suggested: {
+    title: "You’re all caught up.",
+    description:
+      "Save a swap to keep it for your next grocery run, or restore one from Dismissed.",
+  },
+  saved: {
+    title: "Your ideas, saved here.",
+    description:
+      "Save a suggestion to keep it for your next grocery run.",
+  },
+  dismissed: {
+    title: "Nothing set aside.",
+    description:
+      "Dismissed swaps wait here. Restore one to see it in Suggested again.",
+  },
+};
 
 export default function SwapsScreen() {
-  const [activeTab, setActiveTab] = useState<SwapTab>("suggested");
-  const [savedIds, setSavedIds] = useState<string[]>([]);
-  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
+  const swaps = useSwaps();
+  const [tab, setTab] = useState<SwapTab>("suggested");
 
-  // Replace this source with backend data when it is ready.
-  const swaps = mockSwaps;
+  const list =
+    tab === "suggested"
+      ? swaps.suggested
+      : tab === "saved"
+        ? swaps.saved
+        : swaps.dismissed;
 
-  const suggestedSwaps = swaps.filter(
-    (swap) =>
-      !savedIds.includes(swap.id) &&
-      !dismissedIds.includes(swap.id)
-  );
+  const counts: Record<SwapTab, number> = {
+    suggested: swaps.suggested.length,
+    saved: swaps.saved.length,
+    dismissed: swaps.dismissed.length,
+  };
 
-  const savedSwaps = swaps.filter((swap) =>
-    savedIds.includes(swap.id)
-  );
-
-  const visibleSwaps =
-    activeTab === "suggested" ? suggestedSwaps : savedSwaps;
-
-  function saveSwap(id: string) {
-    setSavedIds((current) =>
-      current.includes(id) ? current : [...current, id]
-    );
-  }
-
-  function dismissSwap(id: string) {
-    setDismissedIds((current) =>
-      current.includes(id) ? current : [...current, id]
-    );
-  }
-
-  function removeSavedSwap(id: string) {
-    setSavedIds((current) =>
-      current.filter((savedId) => savedId !== id)
-    );
-  }
+  const emptyCopy = EMPTY_COPY[tab];
 
   return (
     <SafeAreaView
       style={styles.page}
       edges={["top", "left", "right"]}
+      testID="swaps-screen"
     >
-      <ScrollView
+      <FlatList
+        data={list}
+        keyExtractor={(card) => card.swap.id}
+        extraData={tab}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.brand}>♧ sprout</Text>
+        refreshControl={
+          <RefreshControl
+            refreshing={swaps.loading}
+            onRefresh={swaps.refresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <Text style={styles.brand}>♧ sprout</Text>
 
-        <View>
-          <Text style={styles.heading}>Small swaps.</Text>
-          <Text style={styles.subtitle}>
-            Fresh ideas for your next grocery run.
-          </Text>
-        </View>
+            <View>
+              <Text style={styles.heading}>Small swaps.</Text>
+              <Text style={styles.subtitle}>
+                Fresh ideas for your next grocery run.
+              </Text>
+            </View>
 
-        <View style={styles.tabs}>
-          <Pressable
-            accessibilityRole="tab"
-            accessibilityState={{
-              selected: activeTab === "suggested",
-            }}
-            onPress={() => setActiveTab("suggested")}
-            style={[
-              styles.tab,
-              activeTab === "suggested" && styles.activeTab,
-            ]}
-          >
-            <Text
-              style={[
-                styles.tabLabel,
-                activeTab === "suggested" && styles.activeTabLabel,
-              ]}
-            >
-              Suggested ({suggestedSwaps.length})
-            </Text>
-          </Pressable>
+            <View style={styles.tabs} accessibilityRole="tablist">
+              {TABS.map((entry) => {
+                const selected = tab === entry.id;
+                const label = `${entry.label} (${counts[entry.id]})`;
 
-          <Pressable
-            accessibilityRole="tab"
-            accessibilityState={{
-              selected: activeTab === "saved",
-            }}
-            onPress={() => setActiveTab("saved")}
-            style={[
-              styles.tab,
-              activeTab === "saved" && styles.activeTab,
-            ]}
-          >
-            <Text
-              style={[
-                styles.tabLabel,
-                activeTab === "saved" && styles.activeTabLabel,
-              ]}
-            >
-              Saved ({savedSwaps.length})
-            </Text>
-          </Pressable>
-        </View>
+                return (
+                  <Pressable
+                    key={entry.id}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`${entry.label} swaps (${counts[entry.id]})`}
+                    onPress={() => setTab(entry.id)}
+                    style={[styles.tab, selected && styles.activeTab]}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.tabLabel,
+                        selected && styles.activeTabLabel,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
-        <View style={styles.demoNotice}>
-          <Text style={styles.note}>
-            Demo suggestions · Not generated from your receipt.
-            Comparisons are general, not verified product matches.
-          </Text>
-        </View>
+            <View style={styles.notice}>
+              <Text style={styles.note}>
+                From items in your pantry · Comparisons are general, not verified
+                product matches.
+              </Text>
+            </View>
 
-        {visibleSwaps.length > 0 ? (
-          visibleSwaps.map((swap) => (
-            <SwapCard
-              key={swap.id}
-              swap={swap}
-              saved={activeTab === "saved"}
-              onSave={() => saveSwap(swap.id)}
-              onDismiss={() => dismissSwap(swap.id)}
-              onRemove={() => removeSavedSwap(swap.id)}
-            />
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>
-              {activeTab === "saved"
-                ? "Your ideas, saved here."
-                : "You’re all caught up."}
-            </Text>
+            {swaps.error ? (
+              <View style={styles.errorCard}>
+                <Text style={styles.errorTitle}>Couldn’t load swaps</Text>
 
-            <Text style={styles.emptyDescription}>
-              {activeTab === "saved"
-                ? "Save a suggestion to keep it for your next grocery run."
-                : "Check your saved swaps, or restore dismissed suggestions."}
-            </Text>
+                <Text style={styles.errorBody} role="alert">
+                  {swaps.error}
+                </Text>
+
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry loading swaps"
+                  onPress={swaps.retry}
+                  style={({ pressed }) => [
+                    styles.retryButton,
+                    pressed && styles.retryButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.retryButtonLabel}>Try again</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
-        )}
+        }
+        ListEmptyComponent={
+          swaps.loading ? (
+            <View style={styles.loadingCard} testID="swaps-loading">
+              <ActivityIndicator color={colors.primary} />
+              <Text style={styles.loadingLabel}>Finding swaps…</Text>
+            </View>
+          ) : swaps.error ? null : (
+            // Error cards render above regardless of data; this only avoids a
+            // misleading “all caught up” placeholder when the load failed.
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>{emptyCopy.title}</Text>
 
-        {activeTab === "suggested" && dismissedIds.length > 0 && (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setDismissedIds([])}
-            style={styles.restoreButton}
-          >
-            <Text style={styles.restoreLabel}>
-              Restore dismissed suggestions
-            </Text>
-          </Pressable>
+              <Text style={styles.emptyDescription}>
+                {emptyCopy.description}
+              </Text>
+            </View>
+          )
+        }
+        renderItem={({ item: card }) => (
+          <SwapCard
+            swap={card.swap}
+            variant={tab}
+            pending={card.pending}
+            error={card.error}
+            actions={
+              tab === "suggested"
+                ? {
+                    onSave: () => void swaps.save(card.swap.id),
+                    onDismiss: () => void swaps.dismiss(card.swap.id),
+                  }
+                : {
+                    onRestore: () => {
+                      if (tab === "dismissed") {
+                        void swaps.restore(card.swap.id);
+                      } else {
+                        void swaps.unsave(card.swap.id);
+                      }
+                    },
+                  }
+            }
+          />
         )}
-
-        <Text style={styles.footer}>
-          Saved and dismissed choices stay in memory during this session.
-          They reset when the app reloads.
-        </Text>
-      </ScrollView>
+        ListFooterComponent={
+          <Text style={styles.footer}>
+            Saved and dismissed swaps stay with your account. Restore a dismissed
+            swap to see it in Suggested again.
+          </Text>
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -179,6 +221,9 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 16,
     paddingBottom: 32,
+    gap: 20,
+  },
+  header: {
     gap: 20,
   },
   brand: {
@@ -208,6 +253,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 4,
     borderRadius: 20,
   },
   activeTab: {
@@ -215,13 +261,13 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     color: colors.primary,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
   },
   activeTabLabel: {
     color: colors.surface,
   },
-  demoNotice: {
+  notice: {
     paddingHorizontal: 4,
   },
   note: {
@@ -229,10 +275,56 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 17,
   },
+  errorCard: {
+    padding: 20,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  errorTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  errorBody: {
+    color: "#B3261E",
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  retryButton: {
+    minHeight: 44,
+    marginTop: 4,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radii.button,
+    backgroundColor: colors.primary,
+  },
+  retryButtonPressed: {
+    backgroundColor: colors.primaryPressed,
+  },
+  retryButtonLabel: {
+    color: colors.surface,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  loadingCard: {
+    paddingHorizontal: 24,
+    paddingVertical: 36,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    gap: 12,
+  },
+  loadingLabel: {
+    color: colors.muted,
+    fontSize: 13,
+  },
   emptyState: {
     paddingHorizontal: 24,
     paddingVertical: 36,
-    borderRadius: 24,
+    borderRadius: radii.card,
     backgroundColor: colors.surface,
     alignItems: "center",
     gap: 10,
@@ -248,16 +340,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     textAlign: "center",
-  },
-  restoreButton: {
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  restoreLabel: {
-    color: colors.primary,
-    fontSize: 13,
-    fontWeight: "600",
   },
   footer: {
     color: colors.muted,
