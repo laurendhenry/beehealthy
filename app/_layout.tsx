@@ -45,7 +45,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   if (!bootstrapped) {
     return (
       <View style={styles.loading} accessibilityRole="progressbar">
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -85,7 +85,8 @@ function RootNavigator() {
       <Stack.Protected guard={isAuthenticated}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="review_receipt" />
-        <Stack.Screen name="swaps" />
+        <Stack.Screen name="pantry" />
+        <Stack.Screen name="profile" />
       </Stack.Protected>
       <Stack.Protected guard={bootstrapped && !isAuthenticated}>
         <Stack.Screen name="(auth)" />

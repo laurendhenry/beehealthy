@@ -1,23 +1,19 @@
 import { Tabs } from "expo-router";
 import { Text, StyleSheet } from "react-native";
 import { colors } from "../../constants/app-theme";
+import { Lucide } from "@react-native-vector-icons/lucide";
+import { ComponentProps } from "react";
 
 type TabSymbolProps = {
-  symbol: string;
+  symbol: ComponentProps<typeof Lucide>["name"];
   color: string;
   focused: boolean;
 };
 
-function TabSymbol({ symbol, color, focused }: TabSymbolProps) {
+function TabSymbol({ symbol, color }: TabSymbolProps) {
   return (
-    <Text
-      style={[
-        styles.symbol,
-        { color },
-        focused && styles.activeSymbol,
-      ]}
-    >
-      {symbol}
+    <Text style={[styles.symbol, { color }]}>
+      <Lucide name={symbol} size={16} color={color} />
     </Text>
   );
 }
@@ -50,7 +46,7 @@ export default function TabsLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color, focused }) => (
-            <TabSymbol symbol="⌂" color={color} focused={focused} />
+            <TabSymbol symbol="home" color={color} focused={focused} />
           ),
         }}
       />
@@ -60,7 +56,7 @@ export default function TabsLayout() {
         options={{
           title: "Scan",
           tabBarIcon: ({ color, focused }) => (
-            <TabSymbol symbol="▣" color={color} focused={focused} />
+            <TabSymbol symbol="scan" color={color} focused={focused} />
           ),
         }}
       />
@@ -70,7 +66,7 @@ export default function TabsLayout() {
         options={{
           title: "Food swaps",
           tabBarIcon: ({ color, focused }) => (
-            <TabSymbol symbol="⇄" color={color} focused={focused} />
+            <TabSymbol symbol="arrow-left-right" color={color} focused={focused} />
           ),
         }}
       />
@@ -82,8 +78,5 @@ const styles = StyleSheet.create({
   symbol: {
     fontSize: 26,
     lineHeight: 30,
-  },
-  activeSymbol: {
-    fontWeight: "700",
   },
 });

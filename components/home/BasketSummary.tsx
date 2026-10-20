@@ -1,13 +1,15 @@
 /**
- * Basket-summary home card. Honest semantics: counts and value reflect
- * currently available pantry rows only — never confirmed spending.
+ * Basket-summary home card. Honest semantics: counts reflect currently
+ * available pantry rows only — never confirmed spending.
  */
 
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Link } from "expo-router";
 
+import { colors } from "../../constants/app-theme";
 import type { HomeCardError } from "../../hooks/useHomeData";
 import type { BasketSummary as BasketSummaryData } from "../../lib/api/pantry";
+import { styles } from "./home.styles";
 
 type BasketSummaryProps = {
   basket: BasketSummaryData | null;
@@ -15,113 +17,111 @@ type BasketSummaryProps = {
   error: HomeCardError | null;
 };
 
+/** Keep the card short; the pantry screen shows the full breakdown. */
+const MAX_VISIBLE_CATEGORIES = 5;
+
 export function BasketSummary({ basket, loading, error }: BasketSummaryProps) {
+  const categories =
+    basket?.categories.slice(0, MAX_VISIBLE_CATEGORIES) ?? [];
+  const maxCount = Math.max(
+    1,
+    ...categories.map((category) => category.count),
+  );
+  const receiptCount = basket?.receiptCount ?? 0;
+  const itemCount = basket?.itemCount ?? 0;
+
   return (
-    <View style={styles.card} testID="home-basket-summary">
-      <Text style={styles.heading}>Basket</Text>
-      {loading ? (
-        <Text style={styles.muted}>Loading…</Text>
-      ) : error ? (
-        <View>
-          <Text style={styles.error} role="alert">
-            {error.message}
-          </Text>
-          <Pressable
-            style={styles.button}
-            onPress={error.retry}
-            accessibilityRole="button"
-            accessibilityLabel="Retry loading basket summary"
-          >
-            <Text style={styles.buttonText}>Retry</Text>
-          </Pressable>
-        </View>
-      ) : basket ? (
-        <View>
-          <Text style={styles.total}>
-            {basket.itemCount} {basket.itemCount === 1 ? "item" : "items"}
-          </Text>
-          <Text style={styles.meta}>
-            Available now
-            {basket.receiptCount > 0
-              ? ` · from ${basket.receiptCount} ${basket.receiptCount === 1 ? "receipt" : "receipts"}`
-              : ""}
-            {basket.categories.length > 0
-              ? ` · ${basket.categories
-                  .slice(0, 3)
-                  .map((category) => category.label)
-                  .join(", ")}`
-              : ""}
-          </Text>
-          <Link href="/pantry" asChild>
+    <>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>What’s in your basket</Text>
+
+        <Text style={styles.sectionMeta}>
+          {receiptCount > 0
+            ? `Last ${receiptCount} ${receiptCount === 1 ? "receipt" : "receipts"}`
+            : "Available now"}
+        </Text>
+      </View>
+
+      <View style={styles.basketCard} testID="home-basket-summary">
+        {loading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.loadingText}>Loading your basket…</Text>
+          </View>
+        ) : error ? (
+          <View>
+            <Text style={styles.errorText} role="alert">
+              {error.message}
+            </Text>
             <Pressable
-              style={styles.linkButton}
+              style={({ pressed }) => [
+                styles.inlineButton,
+                pressed && styles.inlineButtonPressed,
+              ]}
+              onPress={error.retry}
               accessibilityRole="button"
-              accessibilityLabel="View pantry"
+              accessibilityLabel="Retry loading basket summary"
             >
-              <Text style={styles.linkText}>View pantry</Text>
+              <Text style={styles.inlineButtonText}>Retry</Text>
             </Pressable>
-          </Link>
-        </View>
-      ) : (
-        <Text style={styles.muted}>Your basket is empty.</Text>
-      )}
-    </View>
+          </View>
+        ) : categories.length === 0 ? (
+          <>
+            <Text style={styles.basketFootnote}>
+              Nothing in your basket yet. Scan a receipt and the food you keep
+              shows up here.
+            </Text>
+
+            <Link href="/pantry" asChild>
+              <Pressable
+                style={styles.pantryLink}
+                accessibilityRole="button"
+                accessibilityLabel="View pantry"
+              >
+                <Text style={styles.pantryLinkText}>Open pantry →</Text>
+              </Pressable>
+            </Link>
+          </>
+        ) : (
+          <>
+            {categories.map((category) => (
+              <View key={category.id} style={styles.categoryRow}>
+                <Text style={styles.categoryLabel}>{category.label}</Text>
+
+                <View
+                  style={styles.progressTrack}
+                  accessible
+                  accessibilityLabel={`${category.label}: ${category.count} available items`}
+                >
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: `${(category.count / maxCount) * 100}%` },
+                    ]}
+                  />
+                </View>
+
+                <Text style={styles.categoryCount}>{category.count}</Text>
+              </View>
+            ))}
+
+            <Text style={styles.basketFootnote}>
+              {itemCount} {itemCount === 1 ? "item" : "items"} available ·
+              grouped by food type
+            </Text>
+
+            <Link href="/pantry" asChild>
+              <Pressable
+                style={styles.pantryLink}
+                accessibilityRole="button"
+                accessibilityLabel="View pantry"
+              >
+                <Text style={styles.pantryLinkText}>Open pantry →</Text>
+              </Pressable>
+            </Link>
+          </>
+        )}
+      </View>
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e2e2",
-    padding: 14,
-    marginBottom: 12,
-    backgroundColor: "#fff",
-  },
-  heading: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#666",
-    textTransform: "uppercase",
-  },
-  total: {
-    fontSize: 22,
-    fontWeight: "700",
-    marginTop: 6,
-  },
-  meta: {
-    fontSize: 13,
-    color: "#666",
-    marginTop: 2,
-  },
-  muted: {
-    fontSize: 14,
-    color: "#666",
-    marginTop: 6,
-  },
-  error: {
-    fontSize: 14,
-    color: "#b3261e",
-    marginTop: 6,
-  },
-  button: {
-    backgroundColor: "#1a73e8",
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginTop: 10,
-    alignSelf: "flex-start",
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-  linkButton: {
-    marginTop: 10,
-    alignSelf: "flex-start",
-  },
-  linkText: {
-    color: "#1a73e8",
-    fontWeight: "600",
-  },
-});

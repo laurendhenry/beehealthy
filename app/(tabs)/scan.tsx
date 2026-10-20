@@ -1,33 +1,16 @@
 import { useState } from "react";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
-import {
-  Alert,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Lucide } from "@react-native-vector-icons/lucide";
 
 import { colors } from "../../constants/app-theme";
 import { useReceipt } from "../../context/ReceiptContext";
-import {
-  ReceiptButton,
-  ReceiptCard,
-  ReceiptPage,
-  ui,
-} from "../../components/receipt/ReceiptUI";
+import { ReceiptButton, ReceiptCard, ReceiptPage, ui } from "../../components/receipt/ReceiptUI";
 
 export default function ScanScreen() {
-  const {
-    imageUri,
-    draft,
-    confirmedReceipt,
-    selectImage,
-    loadExample,
-    resetReceipt,
-  } = useReceipt();
+  const { imageUri, draft, confirmedReceipt, selectImage, loadExample, resetReceipt } =
+    useReceipt();
 
   const [busy, setBusy] = useState(false);
 
@@ -36,13 +19,12 @@ export default function ScanScreen() {
 
     try {
       if (useCamera) {
-        const permission =
-          await ImagePicker.requestCameraPermissionsAsync();
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
 
         if (!permission.granted) {
           Alert.alert(
             "Camera access needed",
-            "Allow camera access in your device settings, or import a photo."
+            "Allow camera access in your device settings, or import a photo.",
           );
           return;
         }
@@ -62,10 +44,7 @@ export default function ScanScreen() {
         selectImage(result.assets[0].uri);
       }
     } catch {
-      Alert.alert(
-        "Could not open image picker",
-        "Please try again or use the example receipt."
-      );
+      Alert.alert("Could not open image picker", "Please try again or use the example receipt.");
     } finally {
       setBusy(false);
     }
@@ -77,9 +56,7 @@ export default function ScanScreen() {
 
       <View>
         <Text style={ui.heading}>Scan your receipt</Text>
-        <Text style={ui.subtitle}>
-          Your grocery run, without all the typing.
-        </Text>
+        <Text style={ui.subtitle}>Your grocery run, without all the typing.</Text>
       </View>
 
       <View style={styles.imageArea}>
@@ -92,10 +69,10 @@ export default function ScanScreen() {
           />
         ) : (
           <View style={styles.placeholder}>
-            <Text style={styles.receiptIcon}>▤</Text>
-            <Text style={ui.subtitle}>
-              Take or import a receipt photo
+            <Text style={styles.receiptIcon}>
+              <Lucide name="receipt-text" size={48} color={colors.muted} />
             </Text>
+            <Text style={ui.subtitle}>Take or import a receipt photo</Text>
           </View>
         )}
 
@@ -103,9 +80,7 @@ export default function ScanScreen() {
 
         <View style={styles.imageHint}>
           <Text style={styles.imageHintText}>
-            {imageUri
-              ? "Check that every item is readable"
-              : "Keep every item inside the frame"}
+            {imageUri ? "Check that every item is readable" : "Keep every item inside the frame"}
           </Text>
         </View>
       </View>
@@ -117,7 +92,9 @@ export default function ScanScreen() {
           onPress={() => chooseImage(false)}
           style={styles.sideControl}
         >
-          <Text style={styles.controlIcon}>▧</Text>
+          <Text style={styles.controlIcon}>
+            <Lucide name="image-plus" size={25} color={colors.primary} />
+          </Text>
           <Text style={styles.controlLabel}>Import photo</Text>
         </Pressable>
 
@@ -126,16 +103,15 @@ export default function ScanScreen() {
           accessibilityLabel="Take receipt photo"
           disabled={busy}
           onPress={() => chooseImage(true)}
-          style={({ pressed }) => [
-            styles.shutterRing,
-            (pressed || busy) && { opacity: 0.5 },
-          ]}
+          style={({ pressed }) => [styles.shutterRing, (pressed || busy) && { opacity: 0.5 }]}
         >
           <View style={styles.shutter} />
         </Pressable>
 
         <View style={styles.sideControl}>
-          <Text style={styles.controlIcon}>⌗</Text>
+          <Text style={styles.controlLabel}>
+            <Lucide name="switch-camera" size={25} color={colors.primary} />
+          </Text>
           <Text style={styles.controlLabel}>Photo mode</Text>
         </View>
       </View>
@@ -147,8 +123,8 @@ export default function ScanScreen() {
       />
 
       <Text style={ui.muted}>
-        Frontend demo: photos are not processed yet. Example data is
-        unrelated to the selected image.
+        Frontend demo: photos are not processed yet. Example data is unrelated to the selected
+        image.
       </Text>
 
       <ReceiptCard>
@@ -159,54 +135,39 @@ export default function ScanScreen() {
           </Text>
         </View>
 
-        <Text style={ui.muted}>
-          Review matches before confirming your receipt.
-        </Text>
+        <Text style={ui.muted}>Review matches before confirming your receipt.</Text>
 
         {draft ? (
           <>
             {draft.items.slice(0, 3).map((item) => (
               <View key={item.id} style={ui.row}>
-                <Text style={[ui.text, { flex: 1 }]}>
-                  {item.name}
-                </Text>
+                <Text style={[ui.text, { flex: 1 }]}>{item.name}</Text>
 
                 <Text style={ui.muted}>Qty {item.quantity}</Text>
 
-                <View
-                  style={[
-                    ui.badge,
-                    item.matchStatus === "check" && styles.checkBadge,
-                  ]}
-                >
+                <View style={[ui.badge, item.matchStatus === "check" && styles.checkBadge]}>
                   <Text style={ui.badgeText}>
-                    {item.matchStatus === "matched"
-                      ? "Matched"
-                      : "Check item"}
+                    {item.matchStatus === "matched" ? "Matched" : "Check item"}
                   </Text>
                 </View>
               </View>
             ))}
 
             {draft.items.length > 3 && (
-              <Text style={ui.muted}>
-                + {draft.items.length - 3} more items to review
-              </Text>
+              <Text style={ui.muted}>+ {draft.items.length - 3} more items to review</Text>
             )}
           </>
         ) : (
           <Text style={ui.text}>
-            Your parsed items will appear here after processing.
-            Load the example to test the review flow.
+            Your parsed items will appear here after processing. Load the example to test the review
+            flow.
           </Text>
         )}
       </ReceiptCard>
 
       <View style={ui.row}>
         <Text style={[ui.text, { color: colors.primary, flex: 1 }]}>
-          {draft
-            ? `Review ${draft.items.length} items`
-            : "Ready when you are"}
+          {draft ? `Review ${draft.items.length} items` : "Ready when you are"}
         </Text>
 
         <ReceiptButton
@@ -243,7 +204,7 @@ export default function ScanScreen() {
                   style: "destructive",
                   onPress: resetReceipt,
                 },
-              ]
+              ],
             )
           }
         />

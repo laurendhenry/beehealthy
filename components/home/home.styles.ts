@@ -35,6 +35,32 @@ export const styles = StyleSheet.create({
     color: colors.muted,
     letterSpacing: 0.3,
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  /**
+   * Discreet profile entry point: hairline pill in the original palette so
+   * account preferences / sign-out stay one tap from the dashboard.
+   */
+  profileLink: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: radii.button,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  profileLinkPressed: {
+    backgroundColor: colors.paleGreen,
+  },
+  profileLinkText: {
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    color: colors.primary,
+  },
   heading: {
     fontSize: 30,
     fontWeight: "700",
@@ -256,7 +282,54 @@ export const styles = StyleSheet.create({
     lineHeight: 16,
     color: colors.muted,
   },
-  demoNote: {
+  /**
+   * Loading / error / empty affordances. Warm terracotta keeps failures
+   * legible on both the white and pale-green cards without leaving the
+   * earthy palette.
+   */
+  loadingRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  loadingText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.muted,
+  },
+  errorText: {
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#9C3B2E",
+  },
+  inlineButton: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+  },
+  inlineButtonPressed: {
+    backgroundColor: colors.primaryPressed,
+  },
+  inlineButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.surface,
+  },
+  pantryLink: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+  },
+  pantryLinkText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  syncNote: {
     marginTop: 12,
     fontSize: 10,
     lineHeight: 15,

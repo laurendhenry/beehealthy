@@ -4,107 +4,106 @@
  * allergen-safety claims — renders the server copy verbatim.
  */
 
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
+import { colors } from "../../constants/app-theme";
 import type { CurrentRecommendation } from "../../lib/api/discovery";
 import type { HomeCardError } from "../../hooks/useHomeData";
+import { styles } from "./home.styles";
 
 type RecommendationCardProps = {
   recommendation: CurrentRecommendation["recommendation"];
   loading: boolean;
   error: HomeCardError | null;
+  onPress?: () => void;
 };
 
 export function RecommendationCard({
   recommendation,
   loading,
   error,
+  onPress,
 }: RecommendationCardProps) {
-  return (
-    <View style={styles.card} testID="home-recommendation">
-      <Text style={styles.heading}>Recommended for you</Text>
-      {loading ? (
-        <Text style={styles.muted}>Loading…</Text>
-      ) : error ? (
-        <View>
-          <Text style={styles.error} role="alert">
-            {error.message}
-          </Text>
-          <Pressable
-            style={styles.button}
-            onPress={error.retry}
-            accessibilityRole="button"
-            accessibilityLabel="Retry loading recommendation"
-          >
-            <Text style={styles.buttonText}>Retry</Text>
-          </Pressable>
-        </View>
-      ) : recommendation ? (
-        <View>
-          <Text style={styles.title}>{recommendation.title}</Text>
-          <Text style={styles.body}>{recommendation.description}</Text>
-          {recommendation.detail ? (
-            <Text style={styles.detail}>{recommendation.detail}</Text>
-          ) : null}
-        </View>
-      ) : (
-        <Text style={styles.muted}>
-          No recommendation right now — check back after your next receipt.
-        </Text>
-      )}
+  const showSwapLink = Boolean(recommendation) && !loading && !error;
+
+  const body = loading ? (
+    <View style={styles.loadingRow}>
+      <ActivityIndicator size="small" color={colors.primary} />
+      <Text style={styles.loadingText}>Finding a small step for you…</Text>
     </View>
+  ) : error ? (
+    <View>
+      <Text style={styles.errorText} role="alert">
+        {error.message}
+      </Text>
+      <Pressable
+        style={({ pressed }) => [
+          styles.inlineButton,
+          pressed && styles.inlineButtonPressed,
+        ]}
+        onPress={error.retry}
+        accessibilityRole="button"
+        accessibilityLabel="Retry loading recommendation"
+      >
+        <Text style={styles.inlineButtonText}>Retry</Text>
+      </Pressable>
+    </View>
+  ) : recommendation ? (
+    <>
+      <View style={styles.recommendationTop}>
+        <Text style={styles.leafIcon}>♧</Text>
+
+        <View style={styles.recommendationCopy}>
+          <Text style={styles.recommendationTitle}>
+            {recommendation.title}
+          </Text>
+
+          <Text style={styles.recommendationDescription}>
+            {recommendation.description}
+          </Text>
+        </View>
+      </View>
+
+      {recommendation.detail ? (
+        <>
+          <View style={styles.divider} />
+
+          <Text style={styles.recommendationDetail}>
+            {recommendation.detail}
+          </Text>
+        </>
+      ) : null}
+
+      <Text style={styles.swapLink}>Explore food swaps →</Text>
+    </>
+  ) : (
+    <Text style={styles.recommendationDescription}>
+      No recommendation right now — scan another receipt and check back.
+    </Text>
+  );
+
+  return (
+    <>
+      <Text style={styles.recommendationHeading}>One small step</Text>
+
+      {showSwapLink ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Explore food swap suggestions"
+          testID="home-recommendation"
+          onPress={onPress}
+          style={({ pressed }) => [
+            styles.recommendationCard,
+            pressed && styles.pressedCard,
+          ]}
+        >
+          {body}
+        </Pressable>
+      ) : (
+        <View style={styles.recommendationCard} testID="home-recommendation">
+          {body}
+        </View>
+      )}
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e2e2",
-    padding: 14,
-    marginBottom: 12,
-    backgroundColor: "#fff",
-  },
-  heading: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#666",
-    textTransform: "uppercase",
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: "600",
-    marginTop: 6,
-  },
-  body: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  detail: {
-    fontSize: 13,
-    color: "#666",
-    marginTop: 4,
-  },
-  muted: {
-    fontSize: 14,
-    color: "#666",
-    marginTop: 6,
-  },
-  error: {
-    fontSize: 14,
-    color: "#b3261e",
-    marginTop: 6,
-  },
-  button: {
-    backgroundColor: "#1a73e8",
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginTop: 10,
-    alignSelf: "flex-start",
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-});

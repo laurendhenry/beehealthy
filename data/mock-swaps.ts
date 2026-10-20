@@ -1,4 +1,11 @@
-import type { FoodSwap } from "../types/swap";
+// Legacy preview data only; live swap screens use server DTOs from types/swaps.
+type FoodSwap = {
+  id: string;
+  originalItem: string;
+  suggestedItem: string;
+  similarity: string;
+  benefit: string;
+};
 
 export const mockSwaps: FoodSwap[] = [
   {
