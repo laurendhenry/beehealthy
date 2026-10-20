@@ -2,6 +2,55 @@
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
+## BeeHealthy configuration (M0/M1 foundation)
+
+### Public API origin
+
+Set `EXPO_PUBLIC_API_ORIGIN` to the API **origin only** (scheme + host +
+optional port), for example:
+
+```bash
+EXPO_PUBLIC_API_ORIGIN=https://api.example.test npx expo start
+```
+
+Rules enforced by `lib/config.ts` (`parseApiOrigin`):
+
+- Missing configuration is an error — the app shows a configuration error
+  instead of falling back to any backend.
+- Paths, queries, fragments, and credentials are rejected.
+- Only `https` is accepted, except `http://localhost` (or `127.0.0.1`) for
+  local development.
+- The client derives `https://<origin>/api` (application API, incl.
+  `GET /users/me` and profile `PUT`/`PATCH`/`DELETE /users/me/profile`) and
+  `https://<origin>/api/auth` (Better Auth: sign-up, sign-in, `get-session`,
+  sign-out). The test stub `/auth/session` is NOT a real endpoint.
+
+Never put database/AWS credentials, USDA keys, auth secrets, or secret ARNs
+in `EXPO_PUBLIC_*` variables.
+
+### Auth dependencies
+
+Installed with Expo-compatible resolution (`npx expo install`, no unrelated
+upgrades): `better-auth@1.7.10`, `@better-auth/expo@1.7.10`,
+`expo-secure-store` (native session cookies under the `beehealthy` storage
+prefix, scheme `beehealthy` — see `app.json`). Native transport awaits
+`authClient.getCookie()` and sends it as a `Cookie` header with
+`credentials: "omit"`; web uses `credentials: "include"` and never touches
+cookies manually. No bearer tokens: the backend has no bearer plugin.
+
+### Checks
+
+```bash
+npm run lint       # expo lint
+npm run typecheck  # tsc --noEmit
+npm test           # offline contract tests (origin/path, native-vs-web
+                   # credentials, no S3 cookies, 204/non-JSON, auth expiry)
+```
+
+These offline tests do not prove live readiness. Live staging (migrations,
+secrets, CORS/`AUTH_TRUSTED_ORIGINS`, real devices) requires separate
+authorization per `frontend-integration-plan.md` §11.
+
 ## Get started
 
 1. Install dependencies

@@ -1,67 +1,71 @@
-import { router } from "expo-router";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+/**
+ * Home tab: latest receipt + basket summary + current recommendation,
+ * each loaded independently with per-card failure isolation.
+ *
+ * Data comes from useHomeData (real server reads only — no mocks).
+ * Pull-to-refresh reloads every card. Receipt review/confirm flow is owned
+ * by Agent B's receipt context; this screen only links to it.
+ */
 
-import { BasketSummary } from "../../components/home/BasketSummary";
-import { HomeHeader } from "../../components/home/HomeHeader";
+import { RefreshControl, ScrollView, StyleSheet } from "react-native";
+import { Link, useRouter } from "expo-router";
+
+import { useHomeData } from "../../hooks/useHomeData";
 import { LatestReceiptCard } from "../../components/home/LatestReceiptCard";
+import { BasketSummary } from "../../components/home/BasketSummary";
 import { RecommendationCard } from "../../components/home/RecommendationCard";
-import { styles } from "../../components/home/home.styles";
-import { mockHomeData } from "../../data/mock-home";
 
 export default function HomeScreen() {
-  // This is the current sample-data connection point.
-  const data = mockHomeData;
+  const router = useRouter();
+  const home = useHomeData();
 
   return (
-    <SafeAreaView
-      style={styles.safeArea}
-      edges={["top", "left", "right"]}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={
+            home.latestLoading || home.basketLoading || home.recommendationLoading
+          }
+          onRefresh={home.refreshAll}
+        />
+      }
+      testID="home-screen"
     >
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <HomeHeader />
-
-        <LatestReceiptCard receipt={data.latestReceipt} />
-
-        <View style={styles.actionRow}>
-          <Text style={styles.actionLabel}>Scan receipt</Text>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push("/scan")}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              pressed && styles.primaryButtonPressed,
-            ]}
-          >
-            <Text style={styles.primaryButtonText}>
-              Scan receipt
-            </Text>
-          </Pressable>
-        </View>
-
-        <BasketSummary
-          categories={data.basketCategories}
-          summary={data.basketSummary}
-        />
-
-        <RecommendationCard
-          recommendation={data.recommendation}
-          onPress={() => router.push("/swaps")}
-        />
-
-        <Text style={styles.disclaimer}>
-          Estimates from purchases, not food eaten. These patterns don’t
-          diagnose nutrient deficiencies.
-        </Text>
-
-        <Text style={styles.demoNote}>
-          Demo preview · Receipt and recommendation data are samples.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+      <LatestReceiptCard
+        receipt={home.latestReceipt}
+        loading={home.latestLoading}
+        error={home.latestError}
+        isFirstScan={home.isFirstScan}
+        onScanPress={() => router.push("/review_receipt" as never)}
+      />
+      <BasketSummary
+        basket={home.basket}
+        loading={home.basketLoading}
+        error={home.basketError}
+      />
+      <RecommendationCard
+        recommendation={home.recommendation}
+        loading={home.recommendationLoading}
+        error={home.recommendationError}
+      />
+      {/* Keep the scan-tabs link discoverable; href type follows expo-router
+          generated routes once scan/review screens exist. */}
+      <Link href={"/review_receipt" as never} testID="home-scan-link">
+        Scan a receipt
+      </Link>
+    </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f6f6f6",
+  },
+  content: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+});

@@ -1,164 +1,161 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+/**
+ * One swap suggestion card. Rendered in suggested / saved / dismissed lists.
+ *
+ * Copy rules (plan sections 6, 8 — hard constraints):
+ * - Never promise compatibility or allergen safety. Suggested cards may note
+ *   the stated benefit only; saved cards show the swap pair with no
+ *   compatibility/allergen claims at all.
+ * - No medical or allergen-safety claims anywhere in this component.
+ */
 
-import { colors, radii } from "../../constants/app-theme";
-import type { FoodSwap } from "../../types/swaps";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
-type Props = {
-  swap: FoodSwap;
-  saved: boolean;
-  onSave: () => void;
-  onDismiss: () => void;
-  onRemove: () => void;
+import type { SwapSuggestion, SwapVariant } from "../../types/swaps";
+
+export type SwapCardActions = {
+  onSave?: () => void;
+  onDismiss?: () => void;
+  /** Restore a dismissed (or saved) card back to suggestions. */
+  onRestore?: () => void;
+};
+
+type SwapCardProps = {
+  swap: SwapSuggestion;
+  variant: SwapVariant;
+  pending?: boolean;
+  error?: string | null;
+  actions?: SwapCardActions;
 };
 
 export function SwapCard({
   swap,
-  saved,
-  onSave,
-  onDismiss,
-  onRemove,
-}: Props) {
+  variant,
+  pending = false,
+  error = null,
+  actions = {},
+}: SwapCardProps) {
+  const { onSave, onDismiss, onRestore } = actions;
   return (
-    <View style={styles.card}>
-      <Text style={styles.label}>YOUR ITEM</Text>
-      <Text style={styles.itemName}>{swap.originalItem}</Text>
-
-      <Text style={styles.arrow}>↓</Text>
-
-      <View style={styles.alternative}>
-        <Text style={styles.label}>TRY INSTEAD</Text>
-        <Text style={styles.itemName}>{swap.suggestedItem}</Text>
-      </View>
-
-      <View style={styles.explanation}>
-        <Text style={styles.explanationTitle}>Why it fits</Text>
-        <Text style={styles.body}>{swap.similarity}</Text>
-      </View>
-
-      <View style={styles.explanation}>
-        <Text style={styles.explanationTitle}>Why consider it</Text>
-        <Text style={styles.body}>{swap.benefit}</Text>
-      </View>
-
-      {saved ? (
-        <View style={styles.actions}>
-          <Text style={styles.savedLabel}>✓ Saved</Text>
-
+    <View style={styles.card} testID={`swap-card-${swap.id}`}>
+      <Text style={styles.original}>{swap.originalItem}</Text>
+      <Text style={styles.arrow} accessible={false}>
+        {"→"} {swap.suggestedItem}
+      </Text>
+      {variant === "suggested" && swap.benefit ? (
+        <Text style={styles.benefit}>{swap.benefit}</Text>
+      ) : null}
+      {variant === "suggested" && swap.similarity ? (
+        <Text style={styles.meta}>{swap.similarity}</Text>
+      ) : null}
+      {error ? (
+        <Text style={styles.error} role="alert">
+          {error}
+        </Text>
+      ) : null}
+      <View style={styles.row}>
+        {pending ? <ActivityIndicator size="small" /> : null}
+        {variant === "suggested" && onSave ? (
           <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Remove ${swap.suggestedItem} from saved`}
-            onPress={onRemove}
-            style={styles.textButton}
-          >
-            <Text style={styles.textButtonLabel}>Remove</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View style={styles.actions}>
-          <Pressable
+            style={[styles.button, pending && styles.disabled]}
+            disabled={pending}
+            onPress={onSave}
             accessibilityRole="button"
             accessibilityLabel={`Save swap to ${swap.suggestedItem}`}
-            onPress={onSave}
-            style={({ pressed }) => [
-              styles.saveButton,
-              pressed && styles.pressed,
-            ]}
           >
-            <Text style={styles.saveButtonLabel}>Save swap</Text>
+            <Text style={styles.buttonText}>Save</Text>
           </Pressable>
-
+        ) : null}
+        {variant === "suggested" && onDismiss ? (
           <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Dismiss swap for ${swap.originalItem}`}
+            style={[styles.button, styles.secondary, pending && styles.disabled]}
+            disabled={pending}
             onPress={onDismiss}
-            style={styles.textButton}
+            accessibilityRole="button"
+            accessibilityLabel={`Dismiss swap to ${swap.suggestedItem}`}
           >
-            <Text style={styles.textButtonLabel}>Dismiss</Text>
+            <Text style={[styles.buttonText, styles.secondaryText]}>Dismiss</Text>
           </Pressable>
-        </View>
-      )}
+        ) : null}
+        {variant !== "suggested" && onRestore ? (
+          <Pressable
+            style={[styles.button, pending && styles.disabled]}
+            disabled={pending}
+            onPress={onRestore}
+            accessibilityRole="button"
+            accessibilityLabel={
+              variant === "dismissed"
+                ? `Restore swap to ${swap.suggestedItem}`
+                : `Move swap to ${swap.suggestedItem} back to suggestions`
+            }
+          >
+            <Text style={styles.buttonText}>
+              {variant === "dismissed" ? "Restore" : "Move to suggestions"}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    padding: 20,
-    borderRadius: radii.card,
-    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e2e2",
+    padding: 14,
+    marginBottom: 12,
+    backgroundColor: "#fff",
   },
-  label: {
-    color: colors.muted,
-    fontSize: 10,
-    fontWeight: "600",
-    letterSpacing: 1,
-  },
-  itemName: {
-    marginTop: 6,
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: "600",
-    lineHeight: 25,
+  original: {
+    fontSize: 14,
+    color: "#666",
+    textDecorationLine: "line-through",
   },
   arrow: {
-    marginVertical: 8,
-    marginLeft: 8,
-    color: colors.primary,
-    fontSize: 24,
+    fontSize: 17,
+    fontWeight: "600",
+    marginTop: 2,
   },
-  alternative: {
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: colors.paleGreen,
+  benefit: {
+    fontSize: 14,
+    marginTop: 6,
   },
-  explanation: {
-    marginTop: 16,
-    gap: 4,
-  },
-  explanationTitle: {
-    color: colors.primary,
+  meta: {
     fontSize: 12,
-    fontWeight: "700",
+    color: "#888",
+    marginTop: 4,
   },
-  body: {
-    color: colors.text,
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  actions: {
-    marginTop: 20,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 16,
-  },
-  saveButton: {
-    minHeight: 46,
-    paddingHorizontal: 24,
-    justifyContent: "center",
-    borderRadius: radii.button,
-    backgroundColor: colors.primary,
-  },
-  saveButtonLabel: {
-    color: colors.surface,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  textButton: {
-    minHeight: 46,
-    paddingHorizontal: 8,
-    justifyContent: "center",
-  },
-  textButtonLabel: {
-    color: colors.muted,
+  error: {
     fontSize: 13,
+    color: "#b3261e",
+    marginTop: 8,
   },
-  savedLabel: {
-    color: colors.primary,
-    fontSize: 14,
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+  },
+  button: {
+    backgroundColor: "#1a73e8",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  secondary: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#1a73e8",
+  },
+  buttonText: {
+    color: "#fff",
     fontWeight: "600",
   },
-  pressed: {
-    opacity: 0.75,
+  secondaryText: {
+    color: "#1a73e8",
+  },
+  disabled: {
+    opacity: 0.5,
   },
 });

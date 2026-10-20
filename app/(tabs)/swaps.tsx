@@ -1,268 +1,176 @@
+/**
+ * Swaps tab: suggested / saved / dismissed lists with per-card
+ * save/dismiss/restore and rollback. No bulk restore — dismissed cards are
+ * restored individually.
+ */
+
 import { useState } from "react";
 import {
+  ActivityIndicator,
+  FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useSwaps } from "../../hooks/useSwaps";
 import { SwapCard } from "../../components/swaps/SwapCard";
-import { colors } from "../../constants/app-theme";
-import { mockSwaps } from "../../data/mock-swaps";
+import type { SwapTab } from "../../types/swaps";
 
-type SwapTab = "suggested" | "saved";
+const TABS: { id: SwapTab; label: string }[] = [
+  { id: "suggested", label: "Suggested" },
+  { id: "saved", label: "Saved" },
+  { id: "dismissed", label: "Dismissed" },
+];
 
 export default function SwapsScreen() {
-  const [activeTab, setActiveTab] = useState<SwapTab>("suggested");
-  const [savedIds, setSavedIds] = useState<string[]>([]);
-  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
+  const swaps = useSwaps();
+  const [tab, setTab] = useState<SwapTab>("suggested");
 
-  // Replace this source with backend data when it is ready.
-  const swaps = mockSwaps;
-
-  const suggestedSwaps = swaps.filter(
-    (swap) =>
-      !savedIds.includes(swap.id) &&
-      !dismissedIds.includes(swap.id)
-  );
-
-  const savedSwaps = swaps.filter((swap) =>
-    savedIds.includes(swap.id)
-  );
-
-  const visibleSwaps =
-    activeTab === "suggested" ? suggestedSwaps : savedSwaps;
-
-  function saveSwap(id: string) {
-    setSavedIds((current) =>
-      current.includes(id) ? current : [...current, id]
-    );
-  }
-
-  function dismissSwap(id: string) {
-    setDismissedIds((current) =>
-      current.includes(id) ? current : [...current, id]
-    );
-  }
-
-  function removeSavedSwap(id: string) {
-    setSavedIds((current) =>
-      current.filter((savedId) => savedId !== id)
-    );
-  }
+  const list =
+    tab === "suggested"
+      ? swaps.suggested
+      : tab === "saved"
+        ? swaps.saved
+        : swaps.dismissed;
 
   return (
-    <SafeAreaView
-      style={styles.page}
-      edges={["top", "left", "right"]}
-    >
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.brand}>♧ sprout</Text>
-
-        <View>
-          <Text style={styles.heading}>Small swaps.</Text>
-          <Text style={styles.subtitle}>
-            Fresh ideas for your next grocery run.
-          </Text>
-        </View>
-
-        <View style={styles.tabs}>
+    <View style={styles.container} testID="swaps-screen">
+      <Text style={styles.heading}>Swaps</Text>
+      <View style={styles.tabs} accessibilityRole="tablist">
+        {TABS.map((entry) => (
           <Pressable
+            key={entry.id}
+            style={[styles.tab, tab === entry.id && styles.tabActive]}
+            onPress={() => setTab(entry.id)}
             accessibilityRole="tab"
-            accessibilityState={{
-              selected: activeTab === "suggested",
-            }}
-            onPress={() => setActiveTab("suggested")}
-            style={[
-              styles.tab,
-              activeTab === "suggested" && styles.activeTab,
-            ]}
+            accessibilityState={{ selected: tab === entry.id }}
+            accessibilityLabel={`${entry.label} swaps`}
           >
             <Text
-              style={[
-                styles.tabLabel,
-                activeTab === "suggested" && styles.activeTabLabel,
-              ]}
+              style={[styles.tabText, tab === entry.id && styles.tabTextActive]}
             >
-              Suggested ({suggestedSwaps.length})
+              {entry.label}
             </Text>
           </Pressable>
-
-          <Pressable
-            accessibilityRole="tab"
-            accessibilityState={{
-              selected: activeTab === "saved",
-            }}
-            onPress={() => setActiveTab("saved")}
-            style={[
-              styles.tab,
-              activeTab === "saved" && styles.activeTab,
-            ]}
-          >
-            <Text
-              style={[
-                styles.tabLabel,
-                activeTab === "saved" && styles.activeTabLabel,
-              ]}
-            >
-              Saved ({savedSwaps.length})
-            </Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.demoNotice}>
-          <Text style={styles.note}>
-            Demo suggestions · Not generated from your receipt.
-            Comparisons are general, not verified product matches.
+        ))}
+      </View>
+      {swaps.error ? (
+        <View style={styles.banner}>
+          <Text style={styles.error} role="alert">
+            {swaps.error}
           </Text>
-        </View>
-
-        {visibleSwaps.length > 0 ? (
-          visibleSwaps.map((swap) => (
-            <SwapCard
-              key={swap.id}
-              swap={swap}
-              saved={activeTab === "saved"}
-              onSave={() => saveSwap(swap.id)}
-              onDismiss={() => dismissSwap(swap.id)}
-              onRemove={() => removeSavedSwap(swap.id)}
-            />
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>
-              {activeTab === "saved"
-                ? "Your ideas, saved here."
-                : "You’re all caught up."}
-            </Text>
-
-            <Text style={styles.emptyDescription}>
-              {activeTab === "saved"
-                ? "Save a suggestion to keep it for your next grocery run."
-                : "Check your saved swaps, or restore dismissed suggestions."}
-            </Text>
-          </View>
-        )}
-
-        {activeTab === "suggested" && dismissedIds.length > 0 && (
           <Pressable
+            style={styles.button}
+            onPress={swaps.retry}
             accessibilityRole="button"
-            onPress={() => setDismissedIds([])}
-            style={styles.restoreButton}
+            accessibilityLabel="Retry loading swaps"
           >
-            <Text style={styles.restoreLabel}>
-              Restore dismissed suggestions
-            </Text>
+            <Text style={styles.buttonText}>Retry</Text>
           </Pressable>
+        </View>
+      ) : null}
+      <FlatList
+        data={list}
+        keyExtractor={(card) => card.swap.id}
+        refreshing={swaps.loading}
+        onRefresh={swaps.refresh}
+        ListEmptyComponent={
+          swaps.loading ? (
+            <ActivityIndicator testID="swaps-loading" />
+          ) : (
+            <Text style={styles.muted}>
+              {tab === "suggested"
+                ? "No suggestions right now."
+                : tab === "saved"
+                  ? "No saved swaps yet."
+                  : "No dismissed swaps."}
+            </Text>
+          )
+        }
+        renderItem={({ item: card }) => (
+          <SwapCard
+            swap={card.swap}
+            variant={tab}
+            pending={card.pending}
+            error={card.error}
+            actions={
+              tab === "suggested"
+                ? {
+                    onSave: () => void swaps.save(card.swap.id),
+                    onDismiss: () => void swaps.dismiss(card.swap.id),
+                  }
+                : {
+                    onRestore: () =>
+                      void (tab === "dismissed"
+                        ? swaps.restore(card.swap.id)
+                        : swaps.unsave(card.swap.id)),
+                  }
+            }
+          />
         )}
-
-        <Text style={styles.footer}>
-          Saved and dismissed choices stay in memory during this session.
-          They reset when the app reloads.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: {
+  container: {
     flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    padding: 24,
-    paddingTop: 16,
-    paddingBottom: 32,
-    gap: 20,
-  },
-  brand: {
-    color: colors.primary,
-    fontSize: 17,
+    backgroundColor: "#f6f6f6",
+    padding: 16,
   },
   heading: {
-    color: colors.text,
-    fontSize: 32,
+    fontSize: 22,
     fontWeight: "700",
-    letterSpacing: -0.7,
-  },
-  subtitle: {
-    marginTop: 6,
-    color: colors.muted,
-    fontSize: 14,
-    lineHeight: 21,
+    marginBottom: 12,
   },
   tabs: {
     flexDirection: "row",
-    padding: 4,
-    borderRadius: 24,
-    backgroundColor: colors.paleGreen,
+    gap: 8,
+    marginBottom: 12,
   },
   tab: {
-    flex: 1,
-    minHeight: 44,
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: 20,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#1a73e8",
+    paddingVertical: 6,
+    paddingHorizontal: 14,
   },
-  activeTab: {
-    backgroundColor: colors.primary,
+  tabActive: {
+    backgroundColor: "#1a73e8",
   },
-  tabLabel: {
-    color: colors.primary,
-    fontSize: 13,
+  tabText: {
+    color: "#1a73e8",
     fontWeight: "600",
   },
-  activeTabLabel: {
-    color: colors.surface,
+  tabTextActive: {
+    color: "#fff",
   },
-  demoNotice: {
-    paddingHorizontal: 4,
+  banner: {
+    marginBottom: 12,
   },
-  note: {
-    color: colors.muted,
-    fontSize: 11,
-    lineHeight: 17,
-  },
-  emptyState: {
-    paddingHorizontal: 24,
-    paddingVertical: 36,
-    borderRadius: 24,
-    backgroundColor: colors.surface,
-    alignItems: "center",
-    gap: 10,
-  },
-  emptyTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  emptyDescription: {
-    color: colors.muted,
+  error: {
     fontSize: 14,
-    lineHeight: 21,
+    color: "#b3261e",
+  },
+  muted: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 12,
     textAlign: "center",
   },
-  restoreButton: {
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
+  button: {
+    backgroundColor: "#1a73e8",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginTop: 8,
+    alignSelf: "flex-start",
   },
-  restoreLabel: {
-    color: colors.primary,
-    fontSize: 13,
+  buttonText: {
+    color: "#fff",
     fontWeight: "600",
-  },
-  footer: {
-    color: colors.muted,
-    fontSize: 11,
-    lineHeight: 17,
-    textAlign: "center",
   },
 });
