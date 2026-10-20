@@ -2,9 +2,9 @@
  * Food matching + swaps + recommendations transport.
  *
  * Ownership: matching/swaps scope (plan sections 4, 6, 7, 8, 10-M5).
- * Transport lives in `./pantry` (plan section 4 transport rules shared
- * across my scope); this module adds discovery-specific contracts and the
- * client-side guards the plan requires.
+ * Transport is the canonical `./client` transport (re-exported through
+ * `./pantry` for this scope); this module adds discovery-specific contracts
+ * and the client-side guards the plan requires.
  *
  * Endpoint contracts (all paths relative to `/api`, per plan section 4):
  * - GET    /foods/match            q (2-100 chars), limit 1-20; bare array

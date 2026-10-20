@@ -135,6 +135,26 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.primary,
   },
+  receiptPressable: {
+    alignSelf: "stretch",
+  },
+  receiptDetailsHint: {
+    marginTop: 8,
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.primary,
+  },
+  pressedOpacity: {
+    opacity: 0.65,
+  },
+  historyLink: {
+    marginTop: 12,
+  },
+  historyLinkText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.primary,
+  },
   actionRow: {
     flexDirection: "row",
     justifyContent: "space-between",

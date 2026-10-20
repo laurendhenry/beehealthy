@@ -1,15 +1,15 @@
 /**
- * Pantry + basket + current-user transport.
+ * Pantry + basket + current-user API module.
  *
  * Ownership: home/pantry/profile scope (plan sections 4, 6, 7, 8, 10-M4).
- * Self-contained transport on purpose: the shared foundation modules
- * (`lib/config.ts`, `lib/auth-client.ts`, `lib/api/client.ts`,
- * `lib/api/users.ts`) are owned by Agent A and may not exist yet, so this
- * module implements the plan-specified transport inline (origin handling,
- * credentials, timeouts, 204/non-JSON/error normalization) and exposes
- * `configureApi()` as the wiring point Agent A will connect. No mock data,
- * no mock fallback: every production path performs a real request and
- * surfaces failures to the caller.
+ *
+ * Transport is the canonical `lib/api/client.ts` transport: origin/config
+ * validation, native-vs-web cookie rules, timeouts, 204/non-JSON parsing, and
+ * request-id/error normalization all live there. This module keeps only the
+ * app-facing error taxonomy, wire DTO validation, endpoint contracts, and
+ * pure display/validation helpers. There is no mock data and no fallback:
+ * every production path performs a real request and surfaces failures to the
+ * caller.
  *
  * Endpoint contracts (all paths relative to `/api`, per plan section 4):
  * - GET    /pantry                limit/cursor/optional status (default available)
@@ -27,8 +27,16 @@
  * from here. The profile screen and home data consume them via this module.
  */
 
+import { ConfigError, parseApiOrigin, readApiOriginEnv } from "../config";
+import {
+  ApiError as TransportApiError,
+  apiRequest as transportApiRequest,
+  configureTransport,
+  type ApiRequestOptions as TransportApiRequestOptions,
+} from "./client";
+
 // ---------------------------------------------------------------------------
-// Error model
+// Error model (app-facing taxonomy consumed by hooks/screens)
 // ---------------------------------------------------------------------------
 
 export type ApiErrorCode =
@@ -78,231 +86,141 @@ export function isInvalidCursor(error: unknown): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Configuration / wiring
+// Configuration / wiring compatibility
 // ---------------------------------------------------------------------------
 
 export type CookieProvider = () => Promise<string | null>;
 
-let cookieProvider: CookieProvider | null = null;
-let originOverride: string | null = null;
-
 /**
- * Wiring point for Agent A's auth foundation. When provided, the returned
- * cookie header is attached to native (non-web) requests. Web always relies
- * on browser-managed cookies (`credentials: "include"`) and never sets a
- * Cookie header manually.
- *
- * Assumed Agent A signature: `authClient.getCookie(): Promise<string | null>`
- * backed by SecureStore on native. Until wired, native requests are sent
- * without a manual cookie header and the server answers 401 if no session
- * cookie is present — surfaced, never mocked.
+ * @deprecated Wire the canonical transport instead:
+ * `configureTransport({ cookieProvider: getAuthCookie })` from `./client`.
+ * Kept as a thin compatibility shim; the API origin is configured once via
+ * `EXPO_PUBLIC_API_ORIGIN` in `lib/config.ts` and is not overridable here.
  */
 export function configureApi(options: {
   getCookieHeader?: CookieProvider | null;
-  origin?: string | null;
 }): void {
   if (options.getCookieHeader !== undefined) {
-    cookieProvider = options.getCookieHeader;
-  }
-  if (options.origin !== undefined) {
-    originOverride = options.origin;
+    configureTransport({ cookieProvider: options.getCookieHeader ?? undefined });
   }
 }
 
 /**
- * Normalize and validate the public API origin. Accepts a bare origin only
- * (scheme + host + optional port). Rejects paths, queries, and missing
- * configuration; rejects non-HTTPS origins except loopback/local hosts.
- * Throws ApiError(CONFIGURATION_ERROR) — callers render a configuration
+ * @deprecated Origin parsing lives in `lib/config.ts` (`parseApiOrigin`).
+ * Kept for compatibility and still surfaces the app-facing configuration
  * error, never a production fallback.
  */
 export function normalizeOrigin(raw: string | undefined | null): string {
-  const value = (originOverride ?? raw ?? "").trim();
-  if (!value) {
-    throw new ApiError(
-      "CONFIGURATION_ERROR",
-      "The API origin is not configured. Set EXPO_PUBLIC_API_ORIGIN to the authorized backend origin.",
-    );
-  }
-  const withoutSlash = value.replace(/\/+$/, "");
-  let parsed: URL;
   try {
-    parsed = new URL(withoutSlash);
-  } catch {
-    throw new ApiError(
-      "CONFIGURATION_ERROR",
-      "The API origin is not a valid URL.",
-    );
+    return parseApiOrigin(raw ?? undefined).origin;
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      throw new ApiError("CONFIGURATION_ERROR", error.message);
+    }
+    throw error;
   }
-  if (parsed.pathname !== "/" && parsed.pathname !== "") {
-    throw new ApiError(
-      "CONFIGURATION_ERROR",
-      "The API origin must not contain a path. Use a bare origin such as https://api.example.test.",
-    );
-  }
-  if (parsed.search !== "" || parsed.hash !== "") {
-    throw new ApiError(
-      "CONFIGURATION_ERROR",
-      "The API origin must not contain a query string or fragment.",
-    );
-  }
-  const host = parsed.hostname.toLowerCase();
-  const isLocal =
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host === "::1" ||
-    host.endsWith(".local");
-  if (parsed.protocol !== "https:" && !isLocal) {
-    throw new ApiError(
-      "CONFIGURATION_ERROR",
-      "Production API origins must use HTTPS.",
-    );
-  }
-  return `${parsed.protocol}//${parsed.host}`;
 }
 
+/** @deprecated Use `getApiOrigin` from `lib/config.ts`. */
 export function getApiOrigin(): string {
-  const raw =
-    typeof process !== "undefined"
-      ? process.env?.EXPO_PUBLIC_API_ORIGIN
-      : undefined;
-  return normalizeOrigin(raw ?? null);
+  return normalizeOrigin(readApiOriginEnv());
 }
 
 // ---------------------------------------------------------------------------
-// Transport
+// Transport adapter: canonical client + app error taxonomy
 // ---------------------------------------------------------------------------
 
-export type ApiRequestOptions = {
-  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-  body?: unknown;
-  signal?: AbortSignal | null;
-  /** Per-endpoint timeout in ms. Defaults to 15s. */
-  timeoutMs?: number;
-};
-
-const DEFAULT_TIMEOUT_MS = 15000;
-
-function statusToCode(status: number, serverCode?: string): ApiErrorCode {
-  if (serverCode === "INVALID_CURSOR") return "INVALID_CURSOR";
-  if (status === 401) return "UNAUTHORIZED";
-  if (status === 404) return "NOT_FOUND";
-  if (status === 409) return "VERSION_CONFLICT";
-  if (status === 422) return "VALIDATION_ERROR";
-  if (status === 429) return "QUOTA_EXCEEDED";
-  return "UNKNOWN_ERROR";
-}
+/** Options accepted by the canonical transport (headers/authMode included). */
+export type ApiRequestOptions = TransportApiRequestOptions;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function abortError(): Error {
+  const error = new Error("The request was aborted.");
+  error.name = "AbortError";
+  return error;
+}
+
 /**
- * Core JSON transport. Handles 204 without JSON parsing, non-JSON gateway
- * failures, AbortSignal + timeouts, and preserves status/error code/
- * validation details/request ID. Never logs cookies or payloads.
+ * Map canonical transport codes onto the taxonomy hooks already branch on.
+ * The transport owns HTTP parsing/normalization; this is a thin, lossless
+ * translation of the fields callers render or retry on.
+ */
+function toApiErrorCode(error: TransportApiError): ApiErrorCode {
+  // Server envelopes carry INVALID_CURSOR on 400; callers restart the chain.
+  if (error.code === "INVALID_CURSOR") return "INVALID_CURSOR";
+  // Canonical transport flags 401 as UNAUTHENTICATED; keep the app's
+  // UNAUTHORIZED taxonomy so protected-fetch guards keep matching.
+  if (error.status === 401 || error.code === "UNAUTHENTICATED") {
+    return "UNAUTHORIZED";
+  }
+  switch (error.status) {
+    case 404:
+      return "NOT_FOUND";
+    case 409:
+      return "VERSION_CONFLICT";
+    case 422:
+      return "VALIDATION_ERROR";
+    case 429:
+      return "QUOTA_EXCEEDED";
+    default:
+      break;
+  }
+  if (error.status === 0) {
+    // The canonical transport reports timeouts as NETWORK_ERROR with a
+    // "Request timed out" message (it aborts its internal controller, never
+    // the caller's signal).
+    return /timed out/i.test(error.message) ? "TIMEOUT" : "NETWORK_ERROR";
+  }
+  // Unparseable gateway responses stay retryable safe-read failures.
+  if (error.status >= 500 && /non-json response/i.test(error.message)) {
+    return "GATEWAY_ERROR";
+  }
+  return "UNKNOWN_ERROR";
+}
+
+function toAppApiError(error: TransportApiError): ApiError {
+  return new ApiError(toApiErrorCode(error), error.message, {
+    status: error.status,
+    requestId: error.requestId ?? null,
+    details: error.details,
+  });
+}
+
+/**
+ * Execute a request through the canonical transport, then translate its
+ * `ApiError` into this module's long-standing app error taxonomy. Hooks rely
+ * on `instanceof ApiError` and codes such as UNAUTHORIZED/INVALID_CURSOR.
  */
 export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
-  const origin = getApiOrigin();
-  const method = options.method ?? "GET";
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-
-  const controller = new AbortController();
-  const onAbort = () => controller.abort();
-  options.signal?.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
-    const headers: Record<string, string> = {};
-    if (options.body !== undefined) {
-      headers["Content-Type"] = "application/json";
-    }
-    // Native only: attach the session cookie when a provider is wired.
-    // Web uses browser-managed cookies; never set Cookie manually there.
-    const isWeb =
-      typeof window !== "undefined" &&
-      typeof window.document !== "undefined";
-    if (!isWeb && cookieProvider) {
-      try {
-        const cookie = await cookieProvider();
-        if (cookie) headers["Cookie"] = cookie;
-      } catch {
-        // Cookie retrieval failure degrades to an unauthenticated request;
-        // the server 401 path handles it. Never fabricate a session.
-      }
-    }
-
-    let response: Response;
-    try {
-      response = await fetch(`${origin}/api${path}`, {
-        method,
-        headers,
-        credentials: isWeb ? "include" : "omit",
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
-        signal: controller.signal,
-      });
-    } catch (error) {
-      if (controller.signal.aborted && !options.signal?.aborted) {
-        throw new ApiError(
-          "TIMEOUT",
-          `The request timed out after ${timeoutMs} ms. The outcome is unknown — reconcile before retrying.`,
-        );
-      }
-      if (error instanceof Error && error.name === "AbortError") {
-        throw error;
-      }
-      throw new ApiError(
-        "NETWORK_ERROR",
-        "The network request failed. Previously loaded data is still shown where available.",
-      );
-    }
-
-    const requestId = response.headers?.get?.("X-Request-Id") ?? null;
-    if (response.status === 204) {
-      return undefined as T;
-    }
-    const contentType = response.headers?.get?.("content-type") ?? "";
-    if (!contentType.includes("application/json")) {
-      const text = await response.text().catch(() => "");
-      void text;
+    const payload = await transportApiRequest<T>(path, options);
+    // The canonical transport returns `{ __nonJsonText }` for a 2xx response
+    // that is not JSON. Preserve this module's historical behavior: a
+    // successful status with an unparseable body is still a gateway failure.
+    if (isRecord(payload) && "__nonJsonText" in payload) {
       throw new ApiError(
         "GATEWAY_ERROR",
         "The server returned an unexpected response. Please try again.",
-        { status: response.status, requestId },
       );
     }
-    const payload: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      const nested = isRecord(payload) ? payload["error"] : null;
-      const serverCode =
-        (isRecord(nested) && typeof nested["code"] === "string"
-          ? (nested["code"] as string)
-          : undefined) ??
-        (isRecord(payload) && typeof payload["code"] === "string"
-          ? (payload["code"] as string)
-          : undefined);
-      const message =
-        (isRecord(nested) && typeof nested["message"] === "string"
-          ? (nested["message"] as string)
-          : undefined) ??
-        "The request failed. Please try again.";
-      const details = isRecord(nested) ? nested["details"] : undefined;
-      throw new ApiError(statusToCode(response.status, serverCode), message, {
-        status: response.status,
-        requestId:
-          (isRecord(nested) && typeof nested["requestId"] === "string"
-            ? (nested["requestId"] as string)
-            : null) ?? requestId,
-        details,
-      });
+    return payload;
+  } catch (error) {
+    // Preserve the cancellation contract callers already handle: ignore this
+    // run instead of rendering a network error. (The canonical transport
+    // represents an aborted fetch as NETWORK_ERROR.)
+    if (options.signal?.aborted) throw abortError();
+    if (error instanceof TransportApiError) throw toAppApiError(error);
+    // Missing/invalid EXPO_PUBLIC_API_ORIGIN stays a configuration error.
+    if (error instanceof ConfigError) {
+      throw new ApiError("CONFIGURATION_ERROR", error.message);
     }
-    return payload as T;
-  } finally {
-    clearTimeout(timer);
-    options.signal?.removeEventListener("abort", onAbort);
+    throw error;
   }
 }
 

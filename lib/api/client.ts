@@ -126,7 +126,9 @@ export async function buildApiRequest(
     headers["Content-Type"] = "application/json";
   }
   for (const [key, value] of Object.entries(options.headers ?? {})) {
-    if (platform === "web" && key.toLowerCase() === "cookie") continue;
+    const name = key.toLowerCase();
+    if (name === "cookie" && (platform === "web" || options.authMode === "none")) continue;
+    if (options.authMode === "none" && (name === "authorization" || name === "idempotency-key")) continue;
     headers[key] = value;
   }
 
@@ -205,7 +207,7 @@ function normalizeError(status: number, body: unknown, requestId?: string): ApiE
 
 function combineSignals(
   signal: AbortSignal | null | undefined,
-): { signal: AbortSignal; cancel: () => void } {
+): { signal: AbortSignal; abort: () => void; cancel: () => void } {
   const controller = new AbortController();
   const onAbort = () => controller.abort(signal?.reason);
   if (signal) {
@@ -214,6 +216,7 @@ function combineSignals(
   }
   return {
     signal: controller.signal,
+    abort: () => controller.abort(),
     cancel: () => {
       signal?.removeEventListener("abort", onAbort);
     },
@@ -235,14 +238,14 @@ export async function apiRequest<T>(
   const resolved = await buildApiRequest(path, options, deps);
   const fetchImpl = deps.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const { signal, cancel } = combineSignals(options.signal);
+  const { signal, abort, cancel } = combineSignals(options.signal);
   // Endpoint timeout: unlike a bare controller.abort(), this rejects even
   // when a fetch implementation ignores abort signals (offline tests stub
   // fetch, real runtimes settle via the aborted signal).
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
-      cancel();
+      abort();
       reject(
         new ApiError({ status: 0, code: "NETWORK_ERROR", message: "Request timed out" }),
       );
@@ -250,20 +253,36 @@ export async function apiRequest<T>(
   });
   // Prevent an unhandled rejection when the fetch wins the race.
   timeoutPromise.catch(() => undefined);
-  let response: Response;
+  const abortedError = () => new ApiError({
+    status: 0, code: "ABORTED", message: "Request cancelled",
+  });
+  let rejectAbort: (() => void) | undefined;
+  const abortPromise = new Promise<never>((_, reject) => {
+    rejectAbort = () => reject(abortedError());
+    if (options.signal?.aborted) rejectAbort();
+    else options.signal?.addEventListener("abort", rejectAbort, { once: true });
+  });
+  abortPromise.catch(() => undefined);
+  let result: { response: Response; body: unknown };
   try {
-    response = await Promise.race([
-      fetchImpl(resolved.url, {
-        method: resolved.method,
-        headers: resolved.headers,
-        credentials: resolved.credentials,
-        body: resolved.body,
-        signal,
-      }),
+    if (options.signal?.aborted) throw abortedError();
+    result = await Promise.race([
+      (async () => {
+        const response = await fetchImpl(resolved.url, {
+          method: resolved.method,
+          headers: resolved.headers,
+          credentials: resolved.credentials,
+          body: resolved.body,
+          signal,
+        });
+        return { response, body: await parseBody(response) };
+      })(),
       timeoutPromise,
+      abortPromise,
     ]);
   } catch (error) {
     cancel();
+    if (options.signal?.aborted) throw abortedError();
     if (error instanceof ApiError) throw error;
     throw new ApiError({
       status: 0,
@@ -273,10 +292,12 @@ export async function apiRequest<T>(
   } finally {
     // Ensure the timeout timer is cleared even on success.
     if (timeoutId !== undefined) clearTimeout(timeoutId);
+    if (rejectAbort) options.signal?.removeEventListener("abort", rejectAbort);
     cancel();
   }
+  if (options.signal?.aborted) throw abortedError();
+  const { response, body } = result;
   const requestId = readRequestId(response.headers);
-  const body = await parseBody(response);
   if (!response.ok) {
     throw normalizeError(response.status, body, requestId);
   }

@@ -25,6 +25,7 @@ import { RecommendationCard } from "../../components/home/RecommendationCard";
 import { styles } from "../../components/home/home.styles";
 import { colors } from "../../constants/app-theme";
 import { useHomeData } from "../../hooks/useHomeData";
+import { receiptDetailHref } from "../../lib/api/receipt-history";
 
 export default function HomeScreen() {
   const home = useHomeData();
@@ -86,6 +87,10 @@ export default function HomeScreen() {
           error={home.latestError}
           isFirstScan={home.isFirstScan}
           onScanPress={() => router.push("/scan")}
+          onReceiptPress={(receiptId) =>
+            router.push(receiptDetailHref(receiptId))
+          }
+          onHistoryPress={() => router.push("/receipts")}
         />
 
         <View style={styles.actionRow}>

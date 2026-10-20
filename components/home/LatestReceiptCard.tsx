@@ -15,6 +15,8 @@ type LatestReceiptCardProps = {
   error: HomeCardError | null;
   isFirstScan: boolean;
   onScanPress: () => void;
+  onReceiptPress: (receiptId: string) => void;
+  onHistoryPress: () => void;
 };
 
 function statusLabel(status: string) {
@@ -28,6 +30,8 @@ export function LatestReceiptCard({
   error,
   isFirstScan,
   onScanPress,
+  onReceiptPress,
+  onHistoryPress,
 }: LatestReceiptCardProps) {
   return (
     <View style={styles.receiptCard} testID="home-latest-receipt">
@@ -66,7 +70,17 @@ export function LatestReceiptCard({
             </Pressable>
           </View>
         ) : receipt ? (
-          <View>
+          <Pressable
+            onPress={() => onReceiptPress(receipt.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open latest receipt from ${receipt.store}`}
+            accessibilityHint="Opens receipt details"
+            testID="home-latest-receipt-link"
+            style={({ pressed }) => [
+              styles.receiptPressable,
+              pressed && styles.pressedOpacity,
+            ]}
+          >
             <Text style={styles.storeName}>{receipt.store}</Text>
 
             <Text style={styles.receiptMeta}>
@@ -78,7 +92,9 @@ export function LatestReceiptCard({
             <View style={styles.statusBadge}>
               <Text style={styles.statusText}>{statusLabel(receipt.status)}</Text>
             </View>
-          </View>
+
+            <Text style={styles.receiptDetailsHint}>View details ›</Text>
+          </Pressable>
         ) : (
           <View>
             <Text style={styles.receiptMeta}>
@@ -100,6 +116,20 @@ export function LatestReceiptCard({
           </View>
         )}
       </View>
+
+        <Pressable
+          onPress={onHistoryPress}
+          accessibilityRole="button"
+          accessibilityLabel="View receipt history"
+          hitSlop={6}
+          testID="home-receipt-history-link"
+          style={({ pressed }) => [
+            styles.historyLink,
+            pressed && styles.pressedOpacity,
+          ]}
+        >
+          <Text style={styles.historyLinkText}>View receipt history</Text>
+        </Pressable>
     </View>
   );
 }

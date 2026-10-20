@@ -64,7 +64,7 @@ describe("transport: native vs web credentials", () => {
   it("presigned storage requests (authMode none) send no auth or idempotency headers", async () => {
     const resolved = await buildApiRequest(
       "/upload",
-      { method: "PUT", headers: { "Idempotency-Key": "k" }, authMode: "none" },
+      { method: "PUT", headers: { "Idempotency-Key": "k", cookie: "secret", Authorization: "secret" }, authMode: "none" },
       {
         platform: "native",
         baseUrl: "https://bucket.example.test",
@@ -72,7 +72,9 @@ describe("transport: native vs web credentials", () => {
       },
     );
     assert.ok(!("Cookie" in resolved.headers));
-    assert.equal(resolved.headers["Idempotency-Key"], "k");
+    assert.equal(resolved.headers["Idempotency-Key"], undefined);
+    assert.equal(resolved.headers.cookie, undefined);
+    assert.equal(resolved.headers.Authorization, undefined);
     assert.equal(resolved.credentials, "omit");
   });
 
@@ -174,27 +176,73 @@ describe("transport: response normalization", () => {
     }
   });
 
-  it("propagates AbortSignal cancellation without retrying", async () => {
+  it("propagates AbortSignal cancellation distinctly without retrying", async () => {
     const controller = new AbortController();
-    const seen: string[] = [];
-    const fetchImpl = ((url: string, init?: RequestInit) =>
+    let started!: () => void;
+    const fetching = new Promise<void>((resolve) => { started = resolve; });
+    let calls = 0;
+    const fetchImpl = ((_url: string, init?: RequestInit) =>
       new Promise((_resolve, reject) => {
-        seen.push(String(url));
-        // Mirror real fetch: an already-aborted signal rejects immediately.
-        if (init?.signal?.aborted) {
-          reject(new DOMException("Aborted", "AbortError"));
-          return;
-        }
+        calls += 1;
+        started();
         init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
-      })) as unknown as typeof fetch;
+      })) as typeof fetch;
     const pending = apiRequest("/receipts/1/status", { signal: controller.signal }, {
-      platform: "web",
-      baseUrl: BASE,
-      fetchImpl,
+      platform: "web", baseUrl: BASE, fetchImpl,
     });
+    await fetching;
     controller.abort();
-    await assert.rejects(pending, ApiError);
-    assert.equal(seen.length, 1);
+    await assert.rejects(pending, (error: unknown) => error instanceof ApiError && error.code === "ABORTED");
+    assert.equal(calls, 1);
+  });
+
+  it("never starts a request when its caller already cancelled", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let calls = 0;
+    await assert.rejects(apiRequest("/receipts", { signal: controller.signal }, {
+      platform: "web", baseUrl: BASE,
+      fetchImpl: (async () => { calls += 1; return new Response("{}"); }) as typeof fetch,
+    }), (error: unknown) => error instanceof ApiError && error.code === "ABORTED");
+    assert.equal(calls, 0);
+  });
+
+  it("cancels promptly even when response-body reading ignores abort", async () => {
+    const controller = new AbortController();
+    let reading!: () => void;
+    const bodyStarted = new Promise<void>((resolve) => { reading = resolve; });
+    const response = new Response("{}");
+    response.text = () => { reading(); return new Promise<string>(() => undefined); };
+    const pending = apiRequest("/receipts", { signal: controller.signal }, {
+      platform: "web", baseUrl: BASE, fetchImpl: (async () => response) as typeof fetch,
+    });
+    await bodyStarted;
+    controller.abort();
+    await assert.rejects(pending, (error: unknown) => error instanceof ApiError && error.code === "ABORTED");
+  });
+
+  it("aborts the underlying fetch when a request times out", async () => {
+    let requestSignal: AbortSignal | null | undefined;
+    const fetchImpl = ((_url: string, init?: RequestInit) => {
+      requestSignal = init?.signal;
+      return new Promise<Response>(() => undefined);
+    }) as typeof fetch;
+    await assert.rejects(
+      apiRequest("/receipts", { timeoutMs: 5 }, { platform: "web", baseUrl: BASE, fetchImpl }),
+      (error: unknown) => error instanceof ApiError && error.message === "Request timed out",
+    );
+    assert.equal(requestSignal?.aborted, true);
+  });
+
+  it("keeps the timeout active while reading the response body", async () => {
+    const response = new Response("{}", { headers: { "content-type": "application/json" } });
+    response.text = () => new Promise<string>(() => undefined);
+    await assert.rejects(
+      apiRequest("/receipts", { timeoutMs: 5 }, {
+        platform: "web", baseUrl: BASE, fetchImpl: (async () => response) as typeof fetch,
+      }),
+      (error: unknown) => error instanceof ApiError && error.message === "Request timed out",
+    );
   });
 
   it("never logs cookies, passwords, or signed material on failure", async () => {

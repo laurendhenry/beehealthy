@@ -8,12 +8,10 @@ import { AppDataProvider, useAppData } from "../context/AppDataContext";
 import { ReceiptProvider } from "../context/ReceiptContext";
 import { colors } from "../constants/app-theme";
 import { getAuthCookie } from "../lib/auth-client";
-import { configureApi } from "../lib/api/pantry";
 import { configureTransport } from "../lib/api/client";
 
 // Wire before rendering consumers: native fetch does not share Better Auth's
 // SecureStore cookie jar. Read it afresh for every request (login/refresh/logout).
-configureApi({ getCookieHeader: getAuthCookie });
 configureTransport({ cookieProvider: getAuthCookie });
 
 void SplashScreen.preventAutoHideAsync();
@@ -85,6 +83,7 @@ function RootNavigator() {
       <Stack.Protected guard={isAuthenticated}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="review_receipt" />
+        <Stack.Screen name="receipts" />
         <Stack.Screen name="pantry" />
         <Stack.Screen name="profile" />
       </Stack.Protected>

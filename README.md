@@ -1,99 +1,48 @@
-# Welcome to your Expo app 👋
+# BeeHealthy frontend
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo SDK 54 / React Native application backed by the BeeHealthy API.
 
-## BeeHealthy configuration (M0/M1 foundation)
+## Configuration
 
-### Public API origin
-
-Set `EXPO_PUBLIC_API_ORIGIN` to the API **origin only** (scheme + host +
-optional port), for example:
+Set `EXPO_PUBLIC_API_ORIGIN` to the backend **origin only** (scheme, host, optional port):
 
 ```bash
-EXPO_PUBLIC_API_ORIGIN=https://api.example.test npx expo start
+EXPO_PUBLIC_API_ORIGIN=https://api.example.test npm start
 ```
 
-Rules enforced by `lib/config.ts` (`parseApiOrigin`):
+The client derives `/api` for application endpoints and `/api/auth` for Better Auth. Missing configuration is an error, not a switch to mock data. Paths, credentials, queries, and fragments are rejected. HTTPS is required except for localhost development. A physical device's localhost is not your computer, and `backend`'s watch command is not an HTTP server.
 
-- Missing configuration is an error — the app shows a configuration error
-  instead of falling back to any backend.
-- Paths, queries, fragments, and credentials are rejected.
-- Only `https` is accepted, except `http://localhost` (or `127.0.0.1`) for
-  local development.
-- The client derives `https://<origin>/api` (application API, incl.
-  `GET /users/me` and profile `PUT`/`PATCH`/`DELETE /users/me/profile`) and
-  `https://<origin>/api/auth` (Better Auth: sign-up, sign-in, `get-session`,
-  sign-out). The test stub `/auth/session` is NOT a real endpoint.
+Never put database credentials, AWS credentials, USDA keys, or auth secrets in `EXPO_PUBLIC_*` variables.
 
-Never put database/AWS credentials, USDA keys, auth secrets, or secret ARNs
-in `EXPO_PUBLIC_*` variables.
+## Backend-connected behavior
 
-### Auth dependencies
+- Sign up/sign in before accessing account data. Native requests use the current Better Auth session cookie from SecureStore; web uses browser-managed cookies.
+- Scan a receipt by selecting an image, uploading its bytes to the backend-provided storage URL, and requesting backend parsing. Review the extracted fields before confirming.
+- Example receipt fields are explicitly sample input, not OCR results. Confirming an example creates a real receipt in your account through the same backend confirmation endpoint. It affects pantry inventory just like any other confirmed receipt; delete it from receipt history to remove it and its associated pantry inventory.
+- Confirmation is successful only after the API returns a confirmed receipt. Backend failures remain visible and do not become local success.
+- An interrupted manual confirmation retains its exact request and idempotency key across restarts so it can be retried without inventing local success. If recovery metadata cannot be read, the recovery controls direct you to history before explicitly clearing the pending retry; clearing it does not undo backend changes.
+- Receipt history and detail load persisted server records and allow returning to unfinished receipt processing/review. Unsaved field edits and an unuploaded selected photo are transient UI state, not a durable offline queue.
+- Home, pantry, profile preferences, food matching, saved/dismissed swaps, and recommendations use backend data. Mutations invalidate affected views; refresh reloads server state. There is no mock fallback when requests fail.
+- Basket counts represent currently available pantry items, not food eaten or cumulative purchase quantities. Catalog-dependent results may legitimately be empty.
 
-Installed with Expo-compatible resolution (`npx expo install`, no unrelated
-upgrades): `better-auth@1.7.10`, `@better-auth/expo@1.7.10`,
-`expo-secure-store` (native session cookies under the `beehealthy` storage
-prefix, scheme `beehealthy` — see `app.json`). Native transport awaits
-`authClient.getCookie()` and sends it as a `Cookie` header with
-`credentials: "omit"`; web uses `credentials: "include"` and never touches
-cookies manually. No bearer tokens: the backend has no bearer plugin.
+Signed storage requests do not carry application cookies or idempotency headers. Confirmation and upload allocation use stable idempotency keys; retrying a confirmation with an unknown outcome must retain its original payload/key rather than create a second receipt. Pantry consumption is not idempotent and must be reconciled by refetching after an ambiguous failure.
 
-### Checks
+## Development
 
 ```bash
-npm run lint       # expo lint
-npm run typecheck  # tsc --noEmit
-npm test           # offline contract tests (origin/path, native-vs-web
-                   # credentials, no S3 cookies, 204/non-JSON, auth expiry)
+npm install
+npm start
+npm run lint
+npm run typecheck
+npm test
 ```
 
-These offline tests do not prove live readiness. Live staging (migrations,
-secrets, CORS/`AUTH_TRUSTED_ORIGINS`, real devices) requires separate
-authorization per `frontend-integration-plan.md` §11.
+Use `npx expo install <package>` for SDK-compatible dependency changes. Routes live in `app/`.
 
-## Get started
+## Live environment requirements
 
-1. Install dependencies
+Offline tests validate contracts and recovery behavior; they do **not** prove a deployed database, auth, S3 upload, or Textract integration is healthy. No deployment, migration, catalog import, or cloud write is performed by the test suite.
 
-   ```bash
-   npm install
-   ```
+The backend must be deployed with migrations applied and runtime secrets available. Browser origins need credentialed API CORS and Better Auth trusted origins; native auth needs the `beehealthy://` scheme. S3 must permit the signed upload's required headers for browser clients. Cross-site browser cookie restrictions may require same-site domain configuration. Catalog matching/swaps require actual catalog data and any configured server-side USDA credentials.
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+See `../frontend-integration-plan.md` for contract details and the live acceptance checklist. Account deletion, recipes, meal logging, and persistent offline drafts are not implemented backend capabilities.
