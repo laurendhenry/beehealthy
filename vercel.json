@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npx expo export --platform web",
+  "outputDirectory": "dist",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://52uk4w2mckccytv67qe4za-qdym0uivmv.lambda-url.us-east-2.on.aws/api/:path*"
+    }
+  ],
+  "installCommand": "npm ci"
+}
