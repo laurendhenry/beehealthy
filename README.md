@@ -1,6 +1,6 @@
 # BeeHealthy frontend
 
-Expo SDK 54 / React Native application backed by the BeeHealthy API.
+Expo SDK 58 / React Native application backed by the BeeHealthy API.
 
 ## Configuration
 
