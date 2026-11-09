@@ -53,7 +53,8 @@ function readImageHead(file: File): Uint8Array {
   try {
     const handle = file.open();
     try {
-      return handle.readBytes(8);
+      // `readBytes` is async in SDK 58; the head check needs the bytes now.
+      return handle.readBytesSync(8);
     } finally {
       handle.close();
     }
