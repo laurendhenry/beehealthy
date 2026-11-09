@@ -5,7 +5,6 @@ import {
   MAX_MONEY_CENTS,
   buildReceiptConfirmBody,
   buildReceiptWrite,
-  createExampleForm,
   confirmBodyMatchesResource,
   formFromConfirmBody,
   isDeterministicClientError,
@@ -263,20 +262,7 @@ test("monitor plan honors retryAfterMs, terminal statuses and bounds", () => {
   assert.deepEqual(bounded, { kind: "stop", delayMs: 0, reason: "timeout" });
 });
 
-test("example data is real editable input, never a fabricated match or future date", () => {
-  const example = createExampleForm("2026-03-01");
-  assert.equal(example.date, "2026-03-01");
-  assert.equal(example.total, "19.24");
-  assert.equal(example.items.length, 6);
-  for (const row of example.items) {
-    assert.equal(row.id, null);
-    assert.equal(row.foodId, null);
-    assert.equal(row.matchStatus, "check");
-  }
-  const check = validateReceiptForm(example);
-  assert.equal(check.valid, true);
-  assert.equal(check.mismatch, false);
-
+test("today is the local calendar date", () => {
   const today = todayDateOnly(new Date(2026, 2, 1, 23, 30));
   assert.equal(today, "2026-03-01");
 });

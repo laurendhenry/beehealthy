@@ -33,7 +33,6 @@ export default function ReviewReceiptScreen() {
     formDirty,
     error,
     confirmedReceipt,
-    isExample,
     canEdit,
     canConfirm,
     canSaveDraft,
@@ -210,7 +209,7 @@ export default function ReviewReceiptScreen() {
         <Text style={ui.subtitle}>
           {loading
             ? "Fetching the saved receipt and a fresh image link from the backend."
-            : "Scan a receipt or load the example first. Saved receipts stay available in history."}
+            : "Scan a receipt first. Saved receipts stay available in history."}
         </Text>
 
         {error ? (
@@ -251,13 +250,6 @@ export default function ReviewReceiptScreen() {
             : "Correct anything that doesn’t look right, then save it to your account."}
         </Text>
       </View>
-
-      {isExample && !isConfirmed ? (
-        <Text style={ui.muted}>
-          Example data, entered manually — no photo was uploaded. Nothing is saved until you confirm,
-          and confirmation still goes through the real backend.
-        </Text>
-      ) : null}
 
       {error ? (
         <ReceiptCard>
@@ -348,9 +340,7 @@ export default function ReviewReceiptScreen() {
             </Text>
           ))}
           <Text style={ui.muted}>
-            {isExample
-              ? "Example receipt saved to your account through the backend. No photo was uploaded."
-              : "Saved to your account through the backend. Your pantry was updated from these items."}
+            Saved to your account. Your pantry was updated from these items.
           </Text>
           <Text style={ui.muted}>Receipt reference: {confirmedReceipt.id}</Text>
           <ReceiptButton
@@ -372,9 +362,7 @@ export default function ReviewReceiptScreen() {
             <Text style={ui.muted}>
               {receiptId
                 ? "Not saved as a draft yet — confirm to store it on your account."
-                : isExample
-                  ? "Manual example — nothing is saved until you confirm."
-                  : "This receipt is not saved until you confirm."}
+                : "This receipt is not saved until you confirm."}
             </Text>
           )}
 

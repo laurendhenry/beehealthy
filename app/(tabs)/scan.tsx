@@ -33,11 +33,9 @@ export default function ScanScreen() {
     form,
     confirmedReceipt,
     error,
-    isExample,
     isBusy,
     hasActiveWork,
     startFromPickerAsset,
-    loadExample,
     resetReceipt,
     retryUpload,
     retryParse,
@@ -125,21 +123,6 @@ export default function ScanScreen() {
     }
   }
 
-  function loadExampleReceipt() {
-    if (hasActiveWork) {
-      confirmReplace(
-        "This replaces the current photo and parsed items with example data. You can still review and save the example to your account.",
-        loadExample,
-      );
-      return;
-    }
-    loadExample();
-  }
-
-  const exampleCopy = isExample
-    ? "Example data — no photo was uploaded. Saving still goes through the real backend, so it will appear in your receipt history and update your pantry."
-    : null;
-
   return (
     <ReceiptPage>
       <Text style={ui.brand}>♧ sprout</Text>
@@ -213,15 +196,6 @@ export default function ScanScreen() {
         </View>
       </View>
 
-      <ReceiptButton
-        secondary
-        title={form ? "Reload example data" : "Load example receipt"}
-        disabled={picking || isBusy}
-        onPress={loadExampleReceipt}
-      />
-
-      {exampleCopy ? <Text style={ui.muted}>{exampleCopy}</Text> : null}
-
       {progress ? (
         <ReceiptCard>
           <View style={ui.row}>
@@ -260,7 +234,7 @@ export default function ScanScreen() {
           <Text style={ui.title}>Parsed preview</Text>
           <Text style={ui.muted}>
             {form
-              ? `${isExample ? "Example · " : ""}${form.items.length} items`
+              ? `${form.items.length} items`
               : "No items yet"}
           </Text>
         </View>
@@ -289,8 +263,7 @@ export default function ScanScreen() {
           </>
         ) : (
           <Text style={ui.text}>
-            Your parsed items will appear here after the backend reads your photo. You can also load
-            the example receipt to try the review flow.
+            Your parsed items will appear here after we read your photo.
           </Text>
         )}
       </ReceiptCard>
@@ -315,9 +288,7 @@ export default function ScanScreen() {
             {confirmedReceipt.draft.total}
           </Text>
           <Text style={ui.muted}>
-            {isExample
-              ? "Example receipt saved to your account through the backend. No photo was uploaded."
-              : "Saved to your account. Your pantry was updated from these items."}
+            Saved to your account. Your pantry was updated from these items.
           </Text>
           <ReceiptButton
             title="View confirmed receipt"

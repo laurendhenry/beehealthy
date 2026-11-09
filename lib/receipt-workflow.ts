@@ -402,37 +402,6 @@ export function createEmptyFormItem(name = "", quantity = "1"): ReceiptFormItem 
 }
 
 // ---------------------------------------------------------------------------
-// Example data (available in every build; still saved through the real API)
-// ---------------------------------------------------------------------------
-
-/** Clearly-example receipt. No fixed future date; defaults to today. */
-export function createExampleForm(date: string = todayDateOnly()): ReceiptForm {
-  const rows: [string, string][] = [
-    ["Oat milk 64oz", "4.49"],
-    ["Bananas", "1.29"],
-    ["Sourdough loaf", "4.99"],
-    ["Free range eggs", "5.49"],
-    ["Cheddar block", "2.49"],
-    ["Honeycrisp apple", "0.49"],
-  ];
-  return {
-    store: "Maple Market (example)",
-    date,
-    total: "19.24",
-    currency: "USD",
-    items: rows.map(([name, lineTotal]) => ({
-      key: createLocalItemKey(),
-      id: null,
-      name,
-      quantity: "1",
-      lineTotal,
-      foodId: null,
-      matchStatus: "check",
-    })),
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Idempotency
 // ---------------------------------------------------------------------------
 

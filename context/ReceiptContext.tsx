@@ -48,7 +48,6 @@ import {
   buildReceiptConfirmBody,
   buildReceiptWrite,
   createEmptyFormItem,
-  createExampleForm,
   createIdempotencyKey,
   errorCode,
   confirmBodyMatchesResource,
@@ -115,7 +114,6 @@ type ReceiptState = {
   pendingConfirmStatus: PendingConfirmStatus;
   error: ReceiptStageError | null;
   confirmedReceipt: ReceiptResource | null;
-  isExample: boolean;
 };
 
 const INITIAL_STATE: ReceiptState = {
@@ -136,7 +134,6 @@ const INITIAL_STATE: ReceiptState = {
   pendingConfirmStatus: "none",
   error: null,
   confirmedReceipt: null,
-  isExample: false,
 };
 
 export type ReopenReceiptResult = "loaded" | "needs-confirmation" | "failed";
@@ -155,7 +152,6 @@ export type ReceiptContextValue = {
   formDirty: boolean;
   error: ReceiptStageError | null;
   confirmedReceipt: ReceiptResource | null;
-  isExample: boolean;
   /** Durable manual-confirmation journal state, safe to mirror in recovery UI. */
   pendingConfirmStatus: PendingConfirmStatus;
   /** Derived flags -------------------------------------------------------- */
@@ -172,7 +168,6 @@ export type ReceiptContextValue = {
     asset: PickedReceiptAsset,
     options?: { replace?: boolean },
   ) => Promise<boolean>;
-  loadExample: () => void;
   resetReceipt: () => Promise<boolean>;
   discardPendingConfirmation: () => Promise<boolean>;
   updateForm: (patch: Partial<Pick<ReceiptForm, "store" | "date" | "total">>) => void;
@@ -962,30 +957,6 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
     },
     [isCurrentOperation, newOperation, runUpload, stopMonitor, update],
   );
-
-  const loadExample = useCallback(() => {
-    const current = stateRef.current;
-    const pendingError = pendingBlockError(current.pendingConfirmStatus);
-    if (pendingError || current.confirmOperation) {
-      update({ error: pendingError ?? pendingGuardError() });
-      return;
-    }
-    if (!pendingRestoreSettledRef.current) {
-      update({ error: pendingGuardError() });
-      return;
-    }
-    abortActive();
-    stopMonitor();
-    const owner = ownerRef.current;
-    update({
-      ...INITIAL_STATE,
-      ownerId: owner,
-      phase: "ready",
-      form: createExampleForm(),
-      formDirty: true,
-      isExample: true,
-    });
-  }, [abortActive, stopMonitor, update]);
 
   const resetReceipt = useCallback(async (): Promise<boolean> => {
     // Serialize reset against a confirmation. Otherwise a manual journal save
@@ -2280,7 +2251,6 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       formDirty: state.formDirty,
       error: state.error,
       confirmedReceipt: state.confirmedReceipt,
-      isExample: state.isExample,
       isBusy,
       hasUnsavedWork: state.formDirty || (state.form !== null && state.receiptId === null),
       hasActiveWork: hasActiveWork(state),
@@ -2291,7 +2261,6 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       pendingConfirmStatus: state.pendingConfirmStatus,
       validation,
       startFromPickerAsset,
-      loadExample,
       resetReceipt,
       discardPendingConfirmation,
       updateForm,
@@ -2317,7 +2286,6 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
     clearError,
     confirm,
     discardPendingConfirmation,
-    loadExample,
     refreshImageUrl,
     refreshStatus,
     removeItem,
