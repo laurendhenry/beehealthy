@@ -12,6 +12,7 @@ import type {
   ReceiptErrorStage,
   ReceiptForm,
   ReceiptFormItem,
+  ReceiptPhase,
   ReceiptResource,
   ReceiptStageError,
   ReceiptStatus,
@@ -678,4 +679,32 @@ export function isTerminalStatus(status: ReceiptStatus): boolean {
     status === "failed" ||
     status === "deleted"
   );
+}
+
+// ---------------------------------------------------------------------------
+// Scan screen view state
+// ---------------------------------------------------------------------------
+
+export type ScanView = "capture" | "working" | "ready" | "failed";
+
+/**
+ * What the Scan tab shows for the live flow. A confirmed receipt is finished
+ * work: Scan returns to capture instead of previewing it (the review screen
+ * owns the success view), so a saved receipt never lingers as a stale draft.
+ */
+export function scanViewState(state: {
+  phase: ReceiptPhase;
+  hasForm: boolean;
+}): ScanView {
+  switch (state.phase) {
+    case "idle":
+    case "confirmed":
+      return "capture";
+    case "ready":
+      return state.hasForm ? "ready" : "capture";
+    case "failed":
+      return "failed";
+    default:
+      return "working";
+  }
 }

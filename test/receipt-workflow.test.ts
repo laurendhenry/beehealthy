@@ -15,6 +15,7 @@ import {
   planConfirmOperation,
   planMonitorStep,
   renameReceiptItem,
+  scanViewState,
   selectReceiptItemFoodMatch,
   todayDateOnly,
   validateReceiptForm,
@@ -323,4 +324,24 @@ test("frozen manual confirm bodies restore editable forms and reconcile only exa
     }),
     false,
   );
+});
+
+test("scan never previews a confirmed receipt and maps every phase to one view", () => {
+  assert.equal(scanViewState({ phase: "idle", hasForm: false }), "capture");
+  // Confirmed work is finished: Scan goes back to capture even with a form.
+  assert.equal(scanViewState({ phase: "confirmed", hasForm: true }), "capture");
+  assert.equal(scanViewState({ phase: "ready", hasForm: true }), "ready");
+  assert.equal(scanViewState({ phase: "ready", hasForm: false }), "capture");
+  assert.equal(scanViewState({ phase: "failed", hasForm: true }), "failed");
+  for (const phase of [
+    "loading",
+    "normalizing",
+    "allocating",
+    "uploading",
+    "parsing",
+    "monitoring",
+    "confirming",
+  ] as const) {
+    assert.equal(scanViewState({ phase, hasForm: false }), "working");
+  }
 });

@@ -5,6 +5,7 @@ import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors } from "../constants/app-theme";
 import { useReceipt } from "../context/ReceiptContext";
 import { searchFoods, type FoodMatch } from "../lib/api/discovery";
+import { receiptDetailHref } from "../lib/api/receipt-history";
 import { formatCents, warningCopy } from "../lib/receipt-workflow";
 import {
   ReceiptButton,
@@ -99,6 +100,22 @@ export default function ReviewReceiptScreen() {
       }
     })();
   }, [receiptId, reopenReceipt, routeReceiptId]);
+
+  // A confirmed flow is finished once the person leaves this screen, so the
+  // Scan tab never shows the saved receipt as a stale draft.
+  const leaveRef = useRef({ phase, resetReceipt });
+  useEffect(() => {
+    leaveRef.current = { phase, resetReceipt };
+  }, [phase, resetReceipt]);
+  useEffect(
+    () => () => {
+      const latest = leaveRef.current;
+      if (latest.phase === "confirmed") {
+        void latest.resetReceipt();
+      }
+    },
+    [],
+  );
 
   // Signed image URLs are short lived: refresh when the screen opens.
   useEffect(() => {
@@ -342,15 +359,26 @@ export default function ReviewReceiptScreen() {
           <Text style={ui.muted}>
             Saved to your account. Your pantry was updated from these items.
           </Text>
-          <Text style={ui.muted}>Receipt reference: {confirmedReceipt.id}</Text>
-          <ReceiptButton
-            title="Start another receipt"
-            onPress={() => {
-              void (async () => {
-                if (await resetReceipt()) router.replace("/scan");
-              })();
-            }}
-          />
+          <View style={styles.actionRow}>
+            <ReceiptButton
+              title="View receipt"
+              secondary
+              onPress={() => {
+                const id = confirmedReceipt.id;
+                void (async () => {
+                  if (await resetReceipt()) router.dismissTo(receiptDetailHref(id));
+                })();
+              }}
+            />
+            <ReceiptButton
+              title="Scan another"
+              onPress={() => {
+                void (async () => {
+                  if (await resetReceipt()) router.dismissTo("/scan");
+                })();
+              }}
+            />
+          </View>
         </ReceiptCard>
       ) : (
         <>

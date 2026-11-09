@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { router } from "expo-router";
+import { useCallback, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { Lucide } from "@react-native-vector-icons/lucide";
@@ -13,6 +13,7 @@ import {
   ui,
 } from "../../components/receipt/ReceiptUI";
 import { PendingConfirmRecovery } from "../../components/receipt/PendingConfirmRecovery";
+import { scanViewState } from "../../lib/receipt-workflow";
 
 const PROGRESS_COPY: Partial<Record<string, string>> = {
   normalizing: "Preparing your photo…",
@@ -31,7 +32,6 @@ export default function ScanScreen() {
     imageUrl,
     receiptId,
     form,
-    confirmedReceipt,
     error,
     isBusy,
     hasActiveWork,
@@ -42,7 +42,18 @@ export default function ScanScreen() {
   } = useReceipt();
 
   const [picking, setPicking] = useState(false);
-  const previewUri = imageUri ?? imageUrl;
+  const view = scanViewState({ phase, hasForm: form !== null });
+
+  // A confirmed receipt is finished work: coming back to Scan starts fresh.
+  useFocusEffect(
+    useCallback(() => {
+      if (phase === "confirmed") {
+        void resetReceipt();
+      }
+    }, [phase, resetReceipt]),
+  );
+  const previewUri = view === "capture" ? null : imageUri ?? imageUrl;
+  const previewForm = view === "capture" ? null : form;
   const progress = PROGRESS_COPY[phase];
   const canRetryUpload =
     phase === "failed" && imageUri !== null && (error?.stage === "allocating" || error?.stage === "uploading");
@@ -233,17 +244,17 @@ export default function ScanScreen() {
         <View style={ui.row}>
           <Text style={ui.title}>Parsed preview</Text>
           <Text style={ui.muted}>
-            {form
-              ? `${form.items.length} items`
+            {previewForm
+              ? `${previewForm.items.length} items`
               : "No items yet"}
           </Text>
         </View>
 
         <Text style={ui.muted}>Review the store, total and food matches before saving.</Text>
 
-        {form ? (
+        {previewForm ? (
           <>
-            {form.items.slice(0, 3).map((item) => (
+            {previewForm.items.slice(0, 3).map((item) => (
               <View key={item.key} style={ui.row}>
                 <Text style={[ui.text, { flex: 1 }]}>{item.name || "New item"}</Text>
 
@@ -257,8 +268,8 @@ export default function ScanScreen() {
               </View>
             ))}
 
-            {form.items.length > 3 && (
-              <Text style={ui.muted}>+ {form.items.length - 3} more items to review</Text>
+            {previewForm.items.length > 3 && (
+              <Text style={ui.muted}>+ {previewForm.items.length - 3} more items to review</Text>
             )}
           </>
         ) : (
@@ -270,38 +281,15 @@ export default function ScanScreen() {
 
       <View style={ui.row}>
         <Text style={[ui.text, { color: colors.primary, flex: 1 }]}>
-          {form ? `Review ${form.items.length} items` : "Ready when you are"}
+          {previewForm ? `Review ${previewForm.items.length} items` : "Ready when you are"}
         </Text>
 
         <ReceiptButton
           title="Review receipt"
-          disabled={!form || isBusy || phase === "confirmed"}
+          disabled={!previewForm || isBusy}
           onPress={openReview}
         />
       </View>
-
-      {confirmedReceipt ? (
-        <ReceiptCard>
-          <Text style={ui.title}>Receipt confirmed</Text>
-          <Text style={ui.text}>
-            {confirmedReceipt.draft.store} · {confirmedReceipt.draft.items.length} items · $
-            {confirmedReceipt.draft.total}
-          </Text>
-          <Text style={ui.muted}>
-            Saved to your account. Your pantry was updated from these items.
-          </Text>
-          <ReceiptButton
-            title="View confirmed receipt"
-            secondary
-            onPress={() =>
-              router.push({
-                pathname: "/review_receipt",
-                params: { receiptId: confirmedReceipt.id },
-              })
-            }
-          />
-        </ReceiptCard>
-      ) : null}
 
       {hasActiveWork ? (
         <ReceiptButton
