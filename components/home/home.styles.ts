@@ -163,12 +163,6 @@ export const styles = StyleSheet.create({
     marginTop: 18,
     marginBottom: 20,
   },
-  actionLabel: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "600",
-    color: colors.primary,
-  },
   primaryButton: {
     minHeight: 48,
     paddingHorizontal: 20,
@@ -176,6 +170,9 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: radii.button,
     backgroundColor: colors.primary,
+  },
+  primaryButtonWide: {
+    flex: 1,
   },
   primaryButtonPressed: {
     backgroundColor: colors.primaryPressed,

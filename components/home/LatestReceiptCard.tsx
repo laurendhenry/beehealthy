@@ -14,7 +14,6 @@ type LatestReceiptCardProps = {
   loading: boolean;
   error: HomeCardError | null;
   isFirstScan: boolean;
-  onScanPress: () => void;
   onReceiptPress: (receiptId: string) => void;
   onHistoryPress: () => void;
 };
@@ -29,7 +28,6 @@ export function LatestReceiptCard({
   loading,
   error,
   isFirstScan,
-  onScanPress,
   onReceiptPress,
   onHistoryPress,
 }: LatestReceiptCardProps) {
@@ -96,24 +94,11 @@ export function LatestReceiptCard({
             <Text style={styles.receiptDetailsHint}>View details ›</Text>
           </Pressable>
         ) : (
-          <View>
-            <Text style={styles.receiptMeta}>
-              {isFirstScan
-                ? "Scan your first receipt to see it here."
-                : "No confirmed receipts yet."}
-            </Text>
-            <Pressable
-              style={({ pressed }) => [
-                styles.inlineButton,
-                pressed && styles.inlineButtonPressed,
-              ]}
-              onPress={onScanPress}
-              accessibilityRole="button"
-              accessibilityLabel="Scan a receipt"
-            >
-              <Text style={styles.inlineButtonText}>Scan receipt</Text>
-            </Pressable>
-          </View>
+          <Text style={styles.receiptMeta}>
+            {isFirstScan
+              ? "Scan your first receipt to see it here."
+              : "No confirmed receipts yet."}
+          </Text>
         )}
       </View>
 

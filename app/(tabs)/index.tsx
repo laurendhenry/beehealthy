@@ -86,7 +86,6 @@ export default function HomeScreen() {
           loading={home.latestLoading}
           error={home.latestError}
           isFirstScan={home.isFirstScan}
-          onScanPress={() => router.push("/scan")}
           onReceiptPress={(receiptId) =>
             router.push(receiptDetailHref(receiptId))
           }
@@ -94,8 +93,6 @@ export default function HomeScreen() {
         />
 
         <View style={styles.actionRow}>
-          <Text style={styles.actionLabel}>Scan receipt</Text>
-
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Scan a receipt"
@@ -103,6 +100,7 @@ export default function HomeScreen() {
             onPress={() => router.push("/scan")}
             style={({ pressed }) => [
               styles.primaryButton,
+              styles.primaryButtonWide,
               pressed && styles.primaryButtonPressed,
             ]}
           >
