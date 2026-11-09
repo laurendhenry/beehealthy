@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { router, useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, StyleSheet, Text, View } from "react-native";
 import { Lucide } from "@react-native-vector-icons/lucide";
 
 import { colors } from "../../constants/app-theme";
@@ -13,14 +13,19 @@ import {
   ui,
 } from "../../components/receipt/ReceiptUI";
 import { PendingConfirmRecovery } from "../../components/receipt/PendingConfirmRecovery";
+import { CameraCapture } from "../../components/scan/CameraCapture";
+import type { PickedReceiptAsset } from "../../lib/receipt-image";
 import { scanViewState } from "../../lib/receipt-workflow";
+import type { ReceiptPhase } from "../../types/receipt";
 
-const PROGRESS_COPY: Partial<Record<string, string>> = {
-  normalizing: "Preparing your photo…",
-  allocating: "Starting a secure upload…",
-  uploading: "Uploading your photo…",
-  parsing: "Reading your receipt…",
-  monitoring: "Still reading your receipt…",
+/** Upload pipeline steps shown while a photo is being processed. */
+const STEPS: { label: string; phases: ReceiptPhase[] }[] = [
+  { label: "Preparing photo", phases: ["normalizing", "allocating"] },
+  { label: "Uploading securely", phases: ["uploading"] },
+  { label: "Reading items", phases: ["parsing", "monitoring"] },
+];
+
+const OTHER_WORK_COPY: Partial<Record<ReceiptPhase, string>> = {
   loading: "Loading your receipt…",
   confirming: "Saving your receipt…",
 };
@@ -52,13 +57,15 @@ export default function ScanScreen() {
       }
     }, [phase, resetReceipt]),
   );
-  const previewUri = view === "capture" ? null : imageUri ?? imageUrl;
-  const previewForm = view === "capture" ? null : form;
-  const progress = PROGRESS_COPY[phase];
+
+  const previewUri = imageUri ?? imageUrl;
   const canRetryUpload =
-    phase === "failed" && imageUri !== null && (error?.stage === "allocating" || error?.stage === "uploading");
+    view === "failed" &&
+    imageUri !== null &&
+    (error?.stage === "allocating" || error?.stage === "uploading");
   const canRetryParse =
-    phase === "failed" && receiptId !== null && !canRetryUpload && error?.stage !== "confirming";
+    view === "failed" && receiptId !== null && !canRetryUpload && error?.stage !== "confirming";
+  const needsCheck = form?.items.filter((item) => item.matchStatus === "check").length ?? 0;
 
   function openReview() {
     if (receiptId) {
@@ -68,76 +75,68 @@ export default function ScanScreen() {
     router.push("/review_receipt");
   }
 
-  function confirmReplace(message: string, action: () => void) {
-    Alert.alert("Replace current receipt?", message, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Replace", style: "destructive", onPress: action },
-    ]);
+  function start(asset: PickedReceiptAsset) {
+    if (hasActiveWork) {
+      Alert.alert(
+        "Replace current receipt?",
+        "This replaces the photo and parsed items on this screen. Anything already saved to your account stays in history.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Replace",
+            style: "destructive",
+            onPress: () => void startFromPickerAsset(asset, { replace: true }),
+          },
+        ],
+      );
+      return;
+    }
+    void startFromPickerAsset(asset);
   }
 
-  async function pickImage(useCamera: boolean) {
+  async function importPhoto() {
     if (picking || isBusy) {
       return;
     }
     setPicking(true);
-
     try {
-      if (useCamera) {
-        const permission = await ImagePicker.requestCameraPermissionsAsync();
-        if (!permission.granted) {
-          Alert.alert(
-            "Camera access needed",
-            "Allow camera access in your device settings, or import a photo instead.",
-            [
-              { text: "Not now", style: "cancel" },
-              { text: "Import photo", onPress: () => void pickImage(false) },
-            ],
-          );
-          return;
-        }
-      }
-
-      const options: ImagePicker.ImagePickerOptions = {
+      const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsEditing: false,
         quality: 0.7,
         preferredAssetRepresentationMode:
           ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-      };
-
-      const result = useCamera
-        ? await ImagePicker.launchCameraAsync(options)
-        : await ImagePicker.launchImageLibraryAsync(options);
-
-      // Cancelling the picker is a normal choice, not a failure: keep whatever
-      // photo/draft the receipt already has.
+      });
+      // Cancelling the picker is a normal choice: keep the current state.
       const asset = result.canceled ? undefined : result.assets[0];
-      if (!asset) {
-        return;
+      if (asset) {
+        start(asset);
       }
-
-      if (hasActiveWork) {
-        confirmReplace(
-          "This replaces the photo and parsed items on this screen. Anything already saved to your account stays in history.",
-          () => {
-            void startFromPickerAsset(asset, { replace: true });
-          },
-        );
-        return;
-      }
-
-      await startFromPickerAsset(asset);
     } catch {
-      Alert.alert("Could not open image picker", "Please try again.");
+      Alert.alert("Could not open your photos", "Please try again.");
     } finally {
       setPicking(false);
     }
   }
 
+  function retake() {
+    const clear = () => void resetReceipt();
+    if (view === "ready") {
+      Alert.alert(
+        "Retake photo?",
+        "This clears the parsed items from this screen. The receipt stays in your history as an unconfirmed draft.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Retake", style: "destructive", onPress: clear },
+        ],
+      );
+      return;
+    }
+    clear();
+  }
+
   return (
     <ReceiptPage>
-      <Text style={ui.brand}>♧ sprout</Text>
-
       <View>
         <Text style={ui.heading}>Scan your receipt</Text>
         <Text style={ui.subtitle}>Your grocery run, without all the typing.</Text>
@@ -145,254 +144,152 @@ export default function ScanScreen() {
 
       <PendingConfirmRecovery />
 
-      <View style={styles.imageArea}>
-        {previewUri ? (
-          <Image
-            source={{ uri: previewUri }}
-            style={StyleSheet.absoluteFillObject}
-            resizeMode="contain"
-            accessibilityLabel="Receipt photo"
-          />
-        ) : (
-          <View style={styles.placeholder}>
-            <Text style={styles.receiptIcon}>
-              <Lucide name="receipt-text" size={48} color={colors.muted} />
-            </Text>
-            <Text style={ui.subtitle}>Take or import a receipt photo</Text>
-          </View>
-        )}
-
-        <View pointerEvents="none" style={styles.frame} />
-
-        <View style={styles.imageHint}>
-          <Text style={styles.imageHintText}>
-            {previewUri
-              ? progress ?? "Check that every item is readable"
-              : "Keep every item inside the frame"}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.captureRow}>
-        <Pressable
-          accessibilityRole="button"
+      {view === "capture" ? (
+        <CameraCapture
           disabled={picking || isBusy}
-          onPress={() => pickImage(false)}
-          style={styles.sideControl}
-        >
-          <Text style={styles.controlIcon}>
-            <Lucide name="image-plus" size={25} color={colors.primary} />
-          </Text>
-          <Text style={styles.controlLabel}>Import photo</Text>
-        </Pressable>
+          onCapture={start}
+          onImport={() => void importPhoto()}
+        />
+      ) : (
+        <PhotoPreview uri={previewUri} />
+      )}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Take receipt photo"
-          disabled={picking || isBusy}
-          onPress={() => pickImage(true)}
-          style={({ pressed }) => [
-            styles.shutterRing,
-            (pressed || picking || isBusy) && { opacity: 0.5 },
-          ]}
-        >
-          <View style={styles.shutter} />
-        </Pressable>
-
-        <View style={styles.sideControl}>
-          <Text style={styles.controlLabel}>
-            <Lucide name="switch-camera" size={25} color={colors.primary} />
-          </Text>
-          <Text style={styles.controlLabel}>{isBusy ? "Working" : "Photo mode"}</Text>
-        </View>
-      </View>
-
-      {progress ? (
+      {view === "working" ? (
         <ReceiptCard>
-          <View style={ui.row}>
-            <Text style={ui.title}>{progress}</Text>
-          </View>
+          {OTHER_WORK_COPY[phase] ? (
+            <View style={styles.stepRow}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={ui.title}>{OTHER_WORK_COPY[phase]}</Text>
+            </View>
+          ) : (
+            <ProgressSteps phase={phase} />
+          )}
           <Text style={ui.muted}>
-            Keep this screen open while the backend processes the photo. You can leave — this receipt
-            stays in your account.
+            You can leave this screen — the receipt keeps processing in your account.
           </Text>
         </ReceiptCard>
       ) : null}
 
-      {error ? (
+      {view === "ready" && form ? (
         <ReceiptCard>
-          <Text style={ui.title}>Something needs attention</Text>
-          <Text style={ui.text}>{error.message}</Text>
-          {error.issues?.length ? (
-            <Text style={ui.muted}>
-              {error.issues.map((issue) => issue.message).join(" ")}
+          <View style={styles.stepRow}>
+            <Lucide name="circle-check" size={22} color={colors.primary} />
+            <Text style={[ui.title, styles.flex]}>
+              Read {form.items.length} {form.items.length === 1 ? "item" : "items"}
+              {needsCheck > 0
+                ? `, ${needsCheck} ${needsCheck === 1 ? "needs" : "need"} a check`
+                : ""}
             </Text>
+          </View>
+          <Text style={ui.muted}>
+            Review the store, total and food matches before saving to your pantry.
+          </Text>
+          <View style={styles.actions}>
+            <ReceiptButton title="Review receipt" onPress={openReview} />
+            <ReceiptButton title="Retake" secondary onPress={retake} />
+          </View>
+        </ReceiptCard>
+      ) : null}
+
+      {view === "failed" ? (
+        <ReceiptCard>
+          <View style={styles.stepRow}>
+            <Lucide name="circle-alert" size={22} color={colors.text} />
+            <Text style={ui.title}>Something needs attention</Text>
+          </View>
+          {error ? <Text style={ui.text}>{error.message}</Text> : null}
+          {error?.issues?.length ? (
+            <Text style={ui.muted}>{error.issues.map((issue) => issue.message).join(" ")}</Text>
           ) : null}
-          {error.code ? <Text style={ui.muted}>Reference: {error.code}</Text> : null}
-          <View style={styles.retryRow}>
+          {error?.code ? <Text style={ui.muted}>Reference: {error.code}</Text> : null}
+          <View style={styles.actions}>
             {canRetryUpload ? (
               <ReceiptButton title="Retry upload" onPress={() => void retryUpload()} />
             ) : null}
             {canRetryParse ? (
-              <ReceiptButton title="Retry reading" secondary onPress={() => void retryParse()} />
+              <ReceiptButton title="Retry reading" onPress={() => void retryParse()} />
             ) : null}
+            {form ? <ReceiptButton title="Review receipt" secondary onPress={openReview} /> : null}
+            <ReceiptButton title="Retake" secondary disabled={isBusy} onPress={retake} />
           </View>
         </ReceiptCard>
-      ) : null}
-
-      <ReceiptCard>
-        <View style={ui.row}>
-          <Text style={ui.title}>Parsed preview</Text>
-          <Text style={ui.muted}>
-            {previewForm
-              ? `${previewForm.items.length} items`
-              : "No items yet"}
-          </Text>
-        </View>
-
-        <Text style={ui.muted}>Review the store, total and food matches before saving.</Text>
-
-        {previewForm ? (
-          <>
-            {previewForm.items.slice(0, 3).map((item) => (
-              <View key={item.key} style={ui.row}>
-                <Text style={[ui.text, { flex: 1 }]}>{item.name || "New item"}</Text>
-
-                <Text style={ui.muted}>Qty {item.quantity}</Text>
-
-                <View style={[ui.badge, item.matchStatus === "check" && styles.checkBadge]}>
-                  <Text style={ui.badgeText}>
-                    {item.matchStatus === "matched" ? "Matched" : "Check item"}
-                  </Text>
-                </View>
-              </View>
-            ))}
-
-            {previewForm.items.length > 3 && (
-              <Text style={ui.muted}>+ {previewForm.items.length - 3} more items to review</Text>
-            )}
-          </>
-        ) : (
-          <Text style={ui.text}>
-            Your parsed items will appear here after we read your photo.
-          </Text>
-        )}
-      </ReceiptCard>
-
-      <View style={ui.row}>
-        <Text style={[ui.text, { color: colors.primary, flex: 1 }]}>
-          {previewForm ? `Review ${previewForm.items.length} items` : "Ready when you are"}
-        </Text>
-
-        <ReceiptButton
-          title="Review receipt"
-          disabled={!previewForm || isBusy}
-          onPress={openReview}
-        />
-      </View>
-
-      {hasActiveWork ? (
-        <ReceiptButton
-          title="Start a new receipt"
-          secondary
-          onPress={() =>
-            Alert.alert(
-              "Start a new receipt?",
-              "This clears the current photo and parsed items from this screen. Anything already saved to your account stays in history.",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Clear",
-                  style: "destructive",
-                  onPress: resetReceipt,
-                },
-              ],
-            )
-          }
-        />
       ) : null}
     </ReceiptPage>
   );
 }
 
+function PhotoPreview({ uri }: { uri: string | null }) {
+  return (
+    <View style={styles.preview}>
+      {uri ? (
+        <Image
+          source={{ uri }}
+          style={StyleSheet.absoluteFill}
+          resizeMode="contain"
+          accessibilityLabel="Receipt photo"
+        />
+      ) : (
+        <Lucide name="receipt-text" size={48} color={colors.muted} />
+      )}
+    </View>
+  );
+}
+
+function ProgressSteps({ phase }: { phase: ReceiptPhase }) {
+  const current = STEPS.findIndex((step) => step.phases.includes(phase));
+  return (
+    <View style={styles.steps} accessibilityLabel={STEPS[current]?.label}>
+      {STEPS.map((step, index) => {
+        const done = index < current;
+        const active = index === current;
+        return (
+          <View key={step.label} style={styles.stepRow}>
+            {active ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <Lucide
+                name={done ? "circle-check" : "circle"}
+                size={20}
+                color={done ? colors.primary : colors.muted}
+              />
+            )}
+            <Text style={[ui.text, !done && !active && styles.pending]}>
+              {step.label}
+              {active && phase === "monitoring" ? " — still working…" : ""}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  imageArea: {
-    height: 275,
+  preview: {
+    height: 300,
     borderRadius: 24,
     overflow: "hidden",
     backgroundColor: "#CBD1D5",
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
   },
-  placeholder: {
+  steps: {
+    gap: 10,
+  },
+  stepRow: {
+    flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 24,
   },
-  receiptIcon: {
-    fontSize: 80,
-    color: colors.surface,
-  },
-  frame: {
-    position: "absolute",
-    top: 15,
-    bottom: 15,
-    left: 42,
-    right: 42,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: "#FFFFFFCC",
-  },
-  imageHint: {
-    position: "absolute",
-    bottom: 10,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: colors.text,
-  },
-  imageHintText: {
-    fontSize: 10,
-    color: colors.surface,
-  },
-  captureRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-around",
-  },
-  sideControl: {
-    width: 90,
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-  },
-  controlIcon: {
-    fontSize: 25,
-    color: colors.primary,
-  },
-  controlLabel: {
-    fontSize: 12,
-    color: colors.primary,
-  },
-  shutterRing: {
-    width: 66,
-    height: 66,
-    padding: 3,
-    borderWidth: 2,
-    borderRadius: 33,
-    borderColor: colors.primary,
-  },
-  shutter: {
+  flex: {
     flex: 1,
-    borderRadius: 30,
-    backgroundColor: colors.primary,
   },
-  checkBadge: {
-    backgroundColor: "#F2E8D8",
+  pending: {
+    color: colors.muted,
   },
-  retryRow: {
+  actions: {
     flexDirection: "row",
-    gap: 12,
     flexWrap: "wrap",
+    gap: 12,
   },
 });
