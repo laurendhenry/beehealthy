@@ -1,11 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Lucide } from "@react-native-vector-icons/lucide";
 
 import { colors } from "../constants/app-theme";
 import { useReceipt } from "../context/ReceiptContext";
 import { receiptDetailHref } from "../lib/api/receipt-history";
-import { formatCents, warningCopy } from "../lib/receipt-workflow";
+import {
+  formatCents,
+  itemNeedsCheck,
+  nextItemNeedingCheck,
+  warningCopy,
+} from "../lib/receipt-workflow";
 import {
   ReceiptButton,
   ReceiptCard,
@@ -14,7 +31,8 @@ import {
   ui,
 } from "../components/receipt/ReceiptUI";
 import { PendingConfirmRecovery } from "../components/receipt/PendingConfirmRecovery";
-import { FoodPicker } from "../components/review/FoodPicker";
+import { ItemEditor } from "../components/review/ItemEditor";
+import { ItemRow } from "../components/review/ItemRow";
 
 export default function ReviewReceiptScreen() {
   const params = useLocalSearchParams<{ receiptId?: string }>();
@@ -58,7 +76,8 @@ export default function ReviewReceiptScreen() {
 
   const [saving, setSaving] = useState(false);
   const [attempted, setAttempted] = useState(false);
-  const [matchForKey, setMatchForKey] = useState<string | null>(null);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [showPhoto, setShowPhoto] = useState(false);
   const requestedRef = useRef<string | null>(null);
 
   // Load the persisted receipt named by the route, independent of whatever
@@ -120,7 +139,6 @@ export default function ReviewReceiptScreen() {
   const isConfirmed = confirmedReceipt !== null && phase === "confirmed";
   const previewUri = imageUri ?? imageUrl;
   const signedImageFailed = previewUri === null && receiptId !== null && !isConfirmed;
-  const serverDraft = resource?.draft ?? confirmedReceipt?.draft ?? null;
   const itemsTotal =
     validation?.lineTotalCents !== null && validation?.lineTotalCents !== undefined
       ? formatCents(validation.lineTotalCents)
@@ -143,10 +161,7 @@ export default function ReviewReceiptScreen() {
     try {
       const outcome = await saveDraft();
       if (outcome.status === "saved") {
-        Alert.alert(
-          "Changes saved",
-          "Your edits are stored on the backend and will be here if you reopen this receipt.",
-        );
+        Alert.alert("Changes saved", "Your edits are saved and will be here if you reopen this receipt.");
       }
     } finally {
       setSaving(false);
@@ -158,53 +173,69 @@ export default function ReviewReceiptScreen() {
     if (!canConfirm || phase === "confirming") {
       return;
     }
-    // No navigation here: the confirmed view below only renders after the
-    // server returns a confirmed receipt.
+    // No navigation here: the confirmed view only renders after the server
+    // returns a confirmed receipt.
     await confirm();
   }
 
-  function removeItemWithConfirm(key: string) {
-    Alert.alert("Remove item?", "You can add it again if needed.", [
+  function removeWithConfirm(key: string) {
+    Alert.alert("Remove this line?", "You can add it again if needed.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
         style: "destructive",
-        onPress: () => removeItem(key),
+        onPress: () => {
+          setEditingKey(null);
+          removeItem(key);
+        },
       },
     ]);
   }
+
+  const errorCard = error ? (
+    <ReceiptCard>
+      <Text style={ui.title}>Something needs attention</Text>
+      <Text style={ui.text}>{error.message}</Text>
+      {error.issues?.length ? (
+        <Text style={ui.muted}>{error.issues.map((issue) => issue.message).join(" ")}</Text>
+      ) : null}
+      {error.code ? <Text style={ui.muted}>Reference: {error.code}</Text> : null}
+      <View style={styles.actionRow}>
+        {error.conflict ? (
+          <ReceiptButton title="Use server values" secondary onPress={applyServerValues} />
+        ) : null}
+        {error.conflict ? (
+          <ReceiptButton title="Keep my edits" secondary onPress={clearError} />
+        ) : null}
+        {!isConfirmed && receiptId && phase === "failed" && error.stage !== "confirming" ? (
+          <ReceiptButton title="Retry reading" onPress={() => void retryParse()} />
+        ) : null}
+        {!form && receiptId ? (
+          <ReceiptButton title="Check again" secondary onPress={() => void refreshStatus()} />
+        ) : null}
+      </View>
+    </ReceiptCard>
+  ) : null;
+
+  const backLink = (
+    <Pressable accessibilityRole="button" onPress={goBack} style={styles.back}>
+      <Text style={ui.link}>‹ Back</Text>
+    </Pressable>
+  );
 
   if (!form) {
     const loading = phase === "loading" || (routeReceiptId !== null && phase !== "failed");
     return (
       <ReceiptPage>
-        <Pressable
-          accessibilityRole="button"
-          onPress={goBack}
-          style={{ alignSelf: "flex-start" }}
-        >
-          <Text style={ui.link}>‹ Back</Text>
-        </Pressable>
-
+        {backLink}
         <PendingConfirmRecovery />
         <Text style={ui.heading}>{loading ? "Loading receipt…" : "No receipt to review"}</Text>
         <Text style={ui.subtitle}>
           {loading
-            ? "Fetching the saved receipt and a fresh image link from the backend."
+            ? "Fetching your saved receipt."
             : "Scan a receipt first. Saved receipts stay available in history."}
         </Text>
-
-        {error ? (
-          <ReceiptCard>
-            <Text style={ui.title}>Something needs attention</Text>
-            <Text style={ui.text}>{error.message}</Text>
-            {error.code ? <Text style={ui.muted}>Reference: {error.code}</Text> : null}
-            {receiptId ? (
-              <ReceiptButton title="Check again" secondary onPress={() => void refreshStatus()} />
-            ) : null}
-          </ReceiptCard>
-        ) : null}
-
+        {errorCard}
         {!loading ? (
           <ReceiptButton title="Go to Scan" onPress={() => router.replace("/scan")} />
         ) : null}
@@ -212,156 +243,103 @@ export default function ReviewReceiptScreen() {
     );
   }
 
-  const issues = validation?.issues ?? [];
-
-  return (
-    <ReceiptPage>
-      <Pressable
-        accessibilityRole="button"
-        onPress={goBack}
-        style={{ alignSelf: "flex-start" }}
-      >
-        <Text style={ui.link}>‹ Back</Text>
-      </Pressable>
-
-      <View>
-        <Text style={ui.heading}>{isConfirmed ? "Receipt confirmed" : "Review your receipt"}</Text>
-        <Text style={ui.subtitle}>
-          {isConfirmed
-            ? "This receipt is stored on your account and is read-only."
-            : "Correct anything that doesn’t look right, then save it to your account."}
-        </Text>
-      </View>
-
-      {error ? (
-        <ReceiptCard>
-          <Text style={ui.title}>Something needs attention</Text>
-          <Text style={ui.text}>{error.message}</Text>
-          {error.issues?.length ? (
-            <Text style={ui.muted}>{error.issues.map((issue) => issue.message).join(" ")}</Text>
-          ) : null}
-          {error.code ? <Text style={ui.muted}>Reference: {error.code}</Text> : null}
-          <View style={styles.actionRow}>
-            {error.conflict ? (
-              <ReceiptButton
-                title="Use server values"
-                secondary
-                onPress={applyServerValues}
-              />
-            ) : null}
-            {error.conflict ? (
-              <ReceiptButton title="Keep my edits" secondary onPress={clearError} />
-            ) : null}
-            {!isConfirmed && receiptId && phase === "failed" && error.stage !== "confirming" ? (
-              <ReceiptButton title="Retry reading" onPress={() => void retryParse()} />
-            ) : null}
-          </View>
-        </ReceiptCard>
-      ) : null}
-
-      <PendingConfirmRecovery />
-      {confirmFrozen ? (
-        <ReceiptCard>
-          <Text style={ui.title}>Confirmation not confirmed yet</Text>
-          <Text style={ui.muted}>
-            The last attempt could not reach the server, so it may already have gone through. Keep the
-            details unchanged and retry — this reuses the same idempotency key instead of creating a
-            duplicate.
-          </Text>
-        </ReceiptCard>
-      ) : null}
-
-      {previewUri ? (
-        <ReceiptCard>
-          <Text style={ui.title}>
-            {imageUri ? "Original receipt" : "Receipt image"}
-          </Text>
-          <Image
-            source={{ uri: previewUri }}
-            style={{ width: "100%", height: 240 }}
-            resizeMode="contain"
-            accessibilityLabel="Receipt photo"
-          />
-          {imageUrl && !imageUri ? (
-            <Text style={ui.muted}>Secure image link from the backend. It expires, but the receipt stays.</Text>
-          ) : null}
-        </ReceiptCard>
-      ) : signedImageFailed ? (
-        <ReceiptCard>
-          <Text style={ui.title}>Receipt image</Text>
-          <Text style={ui.muted}>
-            The photo link is unavailable right now. Your receipt details below are loaded from the
-            backend.
-          </Text>
-          <ReceiptButton title="Reload image" secondary onPress={() => void refreshImageUrl()} />
-        </ReceiptCard>
-      ) : null}
-
-      {isConfirmed && confirmedReceipt ? (
+  if (isConfirmed && confirmedReceipt) {
+    return (
+      <ReceiptPage>
+        {backLink}
+        <View style={styles.successHeader}>
+          <Lucide name="circle-check" size={40} color={colors.primary} />
+          <Text style={ui.heading}>Receipt saved</Text>
+          <Text style={ui.subtitle}>Your pantry was updated from these items.</Text>
+        </View>
         <ReceiptCard>
           <View style={ui.row}>
             <Text style={ui.title}>{confirmedReceipt.draft.store}</Text>
             <Text style={ui.muted}>{confirmedReceipt.draft.date}</Text>
           </View>
           <View style={ui.row}>
-            <Text style={ui.text}>Receipt total</Text>
+            <Text style={ui.text}>
+              {confirmedReceipt.draft.items.length}{" "}
+              {confirmedReceipt.draft.items.length === 1 ? "item" : "items"}
+            </Text>
             <Text style={ui.title}>${confirmedReceipt.draft.total}</Text>
           </View>
-          {confirmedReceipt.draft.items.map((item, index) => (
-            <View key={item.id} style={ui.row}>
-              <Text style={[ui.text, { flex: 1 }]}>
-                {index + 1}. {item.name}
-              </Text>
-              <Text style={ui.muted}>Qty {item.quantity}</Text>
-              <Text style={ui.text}>${item.lineTotal}</Text>
-            </View>
-          ))}
           {confirmedReceipt.warnings.map((warning) => (
             <Text key={warning} style={ui.muted}>
               {warningCopy(warning)}
             </Text>
           ))}
           <Text style={ui.muted}>
-            Saved to your account. Your pantry was updated from these items.
+            Healthier swap ideas for these groceries appear in Swaps after a few minutes.
           </Text>
-          <View style={styles.actionRow}>
-            <ReceiptButton
-              title="View receipt"
-              secondary
-              onPress={() => {
-                const id = confirmedReceipt.id;
-                void (async () => {
-                  if (await resetReceipt()) router.dismissTo(receiptDetailHref(id));
-                })();
-              }}
-            />
-            <ReceiptButton
-              title="Scan another"
-              onPress={() => {
-                void (async () => {
-                  if (await resetReceipt()) router.dismissTo("/scan");
-                })();
-              }}
-            />
-          </View>
         </ReceiptCard>
-      ) : (
-        <>
-          {serverDraft && resource?.status === "ready" ? (
-            <Text style={ui.muted}>
-              {formDirty ? "Unsaved changes" : "Saved to your account"} · version {version ?? "—"}
-            </Text>
-          ) : (
-            <Text style={ui.muted}>
-              {receiptId
-                ? "Not saved as a draft yet — confirm to store it on your account."
-                : "This receipt is not saved until you confirm."}
-            </Text>
-          )}
+        <View style={styles.actionRow}>
+          <ReceiptButton
+            title="View receipt"
+            secondary
+            onPress={() => {
+              const id = confirmedReceipt.id;
+              void (async () => {
+                if (await resetReceipt()) router.dismissTo(receiptDetailHref(id));
+              })();
+            }}
+          />
+          <ReceiptButton
+            title="Scan another"
+            onPress={() => {
+              void (async () => {
+                if (await resetReceipt()) router.dismissTo("/scan");
+              })();
+            }}
+          />
+        </View>
+      </ReceiptPage>
+    );
+  }
+
+  const issues = validation?.issues ?? [];
+  const toCheck = form.items.filter(itemNeedsCheck);
+  const editingItem = form.items.find((item) => item.key === editingKey) ?? null;
+  const nextToCheck = nextItemNeedingCheck(form.items, editingKey);
+  const isReadyDraft = receiptId !== null && resource?.status === "ready";
+
+  let saveNote = "Not saved until you confirm.";
+  if (isReadyDraft) {
+    saveNote = formDirty ? "Unsaved changes" : `Draft saved · version ${version ?? "—"}`;
+  }
+
+  return (
+    <SafeAreaView style={ui.page} edges={["top", "left", "right", "bottom"]}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={ui.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {backLink}
+
+          <View>
+            <Text style={ui.heading}>Review receipt</Text>
+            <Text style={ui.subtitle}>{saveNote}</Text>
+          </View>
+
+          {errorCard}
+          <PendingConfirmRecovery />
+          {confirmFrozen ? (
+            <ReceiptCard>
+              <Text style={ui.title}>Confirmation not confirmed yet</Text>
+              <Text style={ui.muted}>
+                The last attempt could not reach the server, so it may already have gone through.
+                Keep the details unchanged and retry — this reuses the same request instead of
+                creating a duplicate.
+              </Text>
+            </ReceiptCard>
+          ) : null}
 
           <ReceiptCard>
-            <Text style={ui.title}>Receipt details</Text>
-
             <ReceiptField
               label="Store"
               value={form.store}
@@ -369,145 +347,85 @@ export default function ReviewReceiptScreen() {
               placeholder="Store name"
               onChangeText={(store) => updateForm({ store })}
             />
-
-            <ReceiptField
-              label="Date · YYYY-MM-DD"
-              placeholder="2026-10-06"
-              value={form.date}
-              editable={canEdit}
-              autoCapitalize="none"
-              onChangeText={(date) => updateForm({ date })}
-            />
-
-            <ReceiptField
-              label="Receipt total ($)"
-              value={form.total}
-              editable={canEdit}
-              keyboardType="decimal-pad"
-              onChangeText={(total) => updateForm({ total })}
-            />
+            <View style={ui.row}>
+              <ReceiptField
+                label="Date · YYYY-MM-DD"
+                placeholder="2026-10-06"
+                value={form.date}
+                editable={canEdit}
+                autoCapitalize="none"
+                onChangeText={(date) => updateForm({ date })}
+              />
+              <ReceiptField
+                label="Total ($)"
+                value={form.total}
+                editable={canEdit}
+                keyboardType="decimal-pad"
+                onChangeText={(total) => updateForm({ total })}
+              />
+            </View>
+            {previewUri ? (
+              <Pressable accessibilityRole="button" onPress={() => setShowPhoto((shown) => !shown)}>
+                <Text style={ui.link}>{showPhoto ? "Hide receipt photo" : "Show receipt photo"}</Text>
+              </Pressable>
+            ) : signedImageFailed ? (
+              <Pressable accessibilityRole="button" onPress={() => void refreshImageUrl()}>
+                <Text style={ui.link}>Reload receipt photo</Text>
+              </Pressable>
+            ) : null}
+            {previewUri && showPhoto ? (
+              <Image
+                source={{ uri: previewUri }}
+                style={styles.photo}
+                resizeMode="contain"
+                accessibilityLabel="Receipt photo"
+              />
+            ) : null}
           </ReceiptCard>
 
-          <View style={ui.row}>
-            <Text style={ui.title}>Items ({form.items.length})</Text>
-            <Text style={ui.muted}>{canEdit ? "Edit before confirming" : "Read-only"}</Text>
-          </View>
-
-          {form.items.map((item, index) => (
-            <ReceiptCard key={item.key}>
-              <View style={ui.row}>
-                <Text style={ui.title}>Item {index + 1}</Text>
-
-                <View style={styles.itemActions}>
-                  <View style={[ui.badge, item.matchStatus === "check" && styles.checkBadge]}>
-                    <Text style={ui.badgeText}>
-                      {item.foodId ? "Matched" : "Needs check"}
-                    </Text>
-                  </View>
-
-                  {canEdit && form.items.length > 1 ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Remove ${item.name || "item"}`}
-                      onPress={() => removeItemWithConfirm(item.key)}
-                    >
-                      <Text style={ui.link}>Remove</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-
-              {item.matchStatus === "check" && !item.foodId ? (
-                <Text style={ui.muted}>
-                  A parsed match is not available for this item. Link it to a food below or leave it
-                  unmatched.
-                </Text>
-              ) : null}
-
-              <ReceiptField
-                label="Item name"
-                value={item.name}
-                editable={canEdit}
-                placeholder="Enter item name"
-                onChangeText={(name) => updateFormItem(item.key, { name })}
-              />
-
-              <View style={ui.row}>
-                <ReceiptField
-                  label="Quantity"
-                  value={item.quantity}
-                  editable={canEdit}
-                  keyboardType="decimal-pad"
-                  onChangeText={(quantity) => updateFormItem(item.key, { quantity })}
-                />
-
-                <ReceiptField
-                  label="Line total ($)"
-                  value={item.lineTotal}
-                  editable={canEdit}
-                  keyboardType="decimal-pad"
-                  onChangeText={(lineTotal) => updateFormItem(item.key, { lineTotal })}
-                />
-              </View>
-
-              {canEdit ? (
-                <View style={styles.actionRow}>
-                  <Pressable accessibilityRole="button" onPress={() => setMatchForKey(item.key)}>
-                    <Text style={ui.link}>
-                      {item.foodId ? "Change food match" : "Match to a food"}
-                    </Text>
-                  </Pressable>
-                  {item.foodId ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => clearFoodMatch(item.key)}
-                    >
-                      <Text style={ui.link}>Clear match</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ) : null}
-
-              {item.foodId ? (
-                <Text style={ui.muted}>
-                  Food: {item.food?.name ?? "linked food"}. Editing the item name clears this match.
-                </Text>
-              ) : null}
-            </ReceiptCard>
-          ))}
-
-          {(() => {
-            const pickerItem = form.items.find((row) => row.key === matchForKey);
-            return (
-              <FoodPicker
-                visible={pickerItem !== undefined && canEdit}
-                itemName={pickerItem?.name ?? ""}
-                initialQuery={pickerItem?.review?.query || pickerItem?.name || ""}
-                suggestions={pickerItem?.review?.suggestions ?? []}
-                currentFoodId={pickerItem?.foodId ?? null}
-                onSelect={(food) => {
-                  if (pickerItem) {
-                    selectFoodMatch(pickerItem.key, food);
-                  }
-                  setMatchForKey(null);
-                }}
-                onClose={() => setMatchForKey(null)}
-              />
-            );
-          })()}
-
           {canEdit ? (
-            <ReceiptButton
-              title="+ Add missing item"
-              secondary
-              disabled={form.items.length >= 200}
-              onPress={addItem}
-            />
+            toCheck.length > 0 ? (
+              <View style={styles.summary}>
+                <Lucide name="circle-help" size={20} color="#7A5A24" />
+                <Text style={[ui.text, styles.flex]}>
+                  {toCheck.length} {toCheck.length === 1 ? "item needs" : "items need"} a check
+                </Text>
+                <ReceiptButton
+                  title="Review next"
+                  onPress={() => setEditingKey(nextItemNeedingCheck(form.items, null)?.key ?? null)}
+                />
+              </View>
+            ) : (
+              <View style={[styles.summary, styles.summaryDone]}>
+                <Lucide name="circle-check" size={20} color={colors.primary} />
+                <Text style={[ui.text, styles.flex]}>All items look good</Text>
+              </View>
+            )
           ) : null}
+
+          <ReceiptCard>
+            <View style={ui.row}>
+              <Text style={ui.title}>Items ({form.items.length})</Text>
+              {canEdit ? <Text style={ui.muted}>Tap an item to edit</Text> : null}
+            </View>
+            <View>
+              {form.items.map((item) => (
+                <ItemRow key={item.key} item={item} onPress={() => setEditingKey(item.key)} />
+              ))}
+            </View>
+            {canEdit ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={form.items.length >= 200}
+                onPress={addItem}
+              >
+                <Text style={ui.link}>+ Add missing item</Text>
+              </Pressable>
+            ) : null}
+          </ReceiptCard>
 
           {resource?.warnings.length ? (
             <ReceiptCard>
-              <Text style={ui.title}>Backend warnings</Text>
               {resource.warnings.map((warning) => (
                 <Text key={warning} style={ui.muted}>
                   {warningCopy(warning)}
@@ -515,21 +433,6 @@ export default function ReviewReceiptScreen() {
               ))}
             </ReceiptCard>
           ) : null}
-
-          <ReceiptCard>
-            <View style={ui.row}>
-              <Text style={ui.text}>Entered item totals</Text>
-              <Text style={ui.title}>${itemsTotal ?? "—"}</Text>
-            </View>
-
-            <Text style={ui.muted}>
-              Line total means the full amount paid for that row. Receipt totals may also include
-              taxes, discounts, or fees; those are never reconciled automatically.
-            </Text>
-            {validation?.mismatch ? (
-              <Text style={ui.muted}>{warningCopy("TOTAL_MISMATCH")}</Text>
-            ) : null}
-          </ReceiptCard>
 
           {attempted && issues.length > 0 ? (
             <ReceiptCard>
@@ -541,57 +444,115 @@ export default function ReviewReceiptScreen() {
               ))}
             </ReceiptCard>
           ) : null}
+        </ScrollView>
 
-          <View style={styles.actionRow}>
-            {receiptId && resource?.status === "ready" ? (
+        <View style={styles.bar}>
+          {validation?.mismatch ? (
+            <View style={styles.mismatch}>
+              <Lucide name="triangle-alert" size={14} color="#7A5A24" />
+              <Text style={[ui.muted, styles.flex]}>
+                Items add up to ${itemsTotal ?? "—"}, receipt total is ${form.total || "—"}. Taxes,
+                fees or discounts can explain the difference.
+              </Text>
+            </View>
+          ) : null}
+          <View style={styles.barActions}>
+            {isReadyDraft ? (
               <ReceiptButton
-                title={saving ? "Saving…" : "Save changes"}
+                title={saving ? "Saving…" : "Save draft"}
                 secondary
                 disabled={!canSaveDraft || !formDirty || saving || phase === "confirming"}
                 onPress={() => void handleSave()}
               />
             ) : null}
-            <ReceiptButton
-              title={
-                phase === "confirming"
-                  ? "Saving receipt…"
-                  : confirmFrozen
-                    ? "Retry confirmation"
-                    : receiptId
-                      ? "Confirm & save to account"
-                      : "Save receipt to account"
-              }
-              disabled={!canConfirm || saving || phase === "confirming"}
-              onPress={() => void handleConfirm()}
-            />
+            <View style={styles.flex}>
+              <ReceiptButton
+                title={
+                  phase === "confirming"
+                    ? "Saving receipt…"
+                    : confirmFrozen
+                      ? "Retry confirmation"
+                      : "Confirm & add to pantry"
+                }
+                disabled={!canConfirm || saving || phase === "confirming"}
+                onPress={() => void handleConfirm()}
+              />
+            </View>
           </View>
+        </View>
+      </KeyboardAvoidingView>
 
-          <Text
-            style={[ui.muted, { textAlign: "center", color: colors.primary }]}
-          >
-            {receiptId
-              ? "Confirmation checks the receipt version on the server. If it changed elsewhere, your edits stay here and the conflict is shown above."
-              : "Confirmation creates the saved receipt on the backend and updates your pantry."}
-          </Text>
-        </>
-      )}
-    </ReceiptPage>
+      <ItemEditor
+        item={editingItem}
+        canEdit={canEdit}
+        canRemove={form.items.length > 1}
+        hasNext={canEdit && nextToCheck !== null}
+        onChange={(patch) => editingItem && updateFormItem(editingItem.key, patch)}
+        onSelectFood={(food) => editingItem && selectFoodMatch(editingItem.key, food)}
+        onConfirmFood={() =>
+          editingItem?.foodId && selectFoodMatch(editingItem.key, { id: editingItem.foodId })
+        }
+        onClearFood={() => editingItem && clearFoodMatch(editingItem.key)}
+        onRemove={() => editingItem && removeWithConfirm(editingItem.key)}
+        onNext={() => setEditingKey(nextToCheck?.key ?? null)}
+        onClose={() => setEditingKey(null)}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  back: {
+    alignSelf: "flex-start",
+  },
   actionRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     flexWrap: "wrap",
   },
-  itemActions: {
+  successHeader: {
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  photo: {
+    width: "100%",
+    height: 320,
+  },
+  summary: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingLeft: 16,
+    paddingRight: 10,
+    backgroundColor: "#F2E8D8",
+  },
+  summaryDone: {
+    backgroundColor: colors.paleGreen,
+    paddingVertical: 14,
+  },
+  bar: {
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  mismatch: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+  },
+  barActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-  },
-  checkBadge: {
-    backgroundColor: "#F2E8D8",
   },
 });

@@ -14,6 +14,9 @@ import {
   parseMoneyToCents,
   planConfirmOperation,
   planMonitorStep,
+  itemNeedsCheck,
+  itemReviewChip,
+  nextItemNeedingCheck,
   renameReceiptItem,
   scanViewState,
   selectReceiptItemFoodMatch,
@@ -344,4 +347,38 @@ test("scan never previews a confirmed receipt and maps every phase to one view",
   ] as const) {
     assert.equal(scanViewState({ phase, hasForm: false }), "working");
   }
+});
+
+test("review chips follow matchStatus, not just the presence of a food", () => {
+  const base: ReceiptFormItem = {
+    key: "a", id: null, name: "Milk", quantity: "1", lineTotal: "1.00",
+    foodId: null, matchStatus: "check",
+  };
+  const food = { id: FOOD_ID, name: "Milk, whole", category: "dairy" };
+  assert.deepEqual(itemReviewChip({ ...base, foodId: FOOD_ID, food, matchStatus: "matched" }), {
+    kind: "matched", label: "Milk, whole",
+  });
+  // Mid-confidence: food set but flagged — must read as "confirm", not "matched".
+  assert.deepEqual(itemReviewChip({ ...base, foodId: FOOD_ID, food, matchStatus: "check" }), {
+    kind: "confirm", label: "Milk, whole",
+  });
+  assert.equal(itemReviewChip(base).kind, "unmatched");
+  const bag = { ...base, review: { nonFood: true, query: "bag", suggestions: [] } };
+  assert.equal(itemReviewChip(bag).kind, "nonFood");
+  assert.equal(itemNeedsCheck(bag), false);
+  assert.equal(itemNeedsCheck(base), true);
+
+  const items = [
+    { ...base, key: "1", foodId: FOOD_ID, matchStatus: "matched" as const },
+    { ...base, key: "2" },
+    { ...bag, key: "3" },
+    { ...base, key: "4", foodId: FOOD_ID, matchStatus: "check" as const },
+  ];
+  assert.equal(nextItemNeedingCheck(items, null)?.key, "2");
+  assert.equal(nextItemNeedingCheck(items, "2")?.key, "4");
+  assert.equal(nextItemNeedingCheck(items, "4")?.key, "2");
+  assert.equal(nextItemNeedingCheck([items[0], items[2]], null), null);
+  // Selecting a food is an explicit pick: the row no longer needs a check.
+  const picked = selectReceiptItemFoodMatch(items[3], food);
+  assert.equal(itemReviewChip(picked).kind, "matched");
 });

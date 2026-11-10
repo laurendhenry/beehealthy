@@ -729,3 +729,49 @@ export function scanViewState(state: {
       return "working";
   }
 }
+
+// ---------------------------------------------------------------------------
+// Review chips
+// ---------------------------------------------------------------------------
+
+export type ItemReviewChip =
+  | { kind: "matched"; label: string }
+  | { kind: "confirm"; label: string }
+  | { kind: "unmatched"; label: string }
+  | { kind: "nonFood"; label: string };
+
+/**
+ * One status for a review row, driven by `matchStatus` (never by `foodId`
+ * alone): a mid-confidence automatic match has a food but is still "check".
+ */
+export function itemReviewChip(item: ReceiptFormItem): ItemReviewChip {
+  if (item.foodId) {
+    const label = item.food?.name ?? "Linked food";
+    return item.matchStatus === "matched" ? { kind: "matched", label } : { kind: "confirm", label };
+  }
+  if (item.review?.nonFood) {
+    return { kind: "nonFood", label: "Not food" };
+  }
+  return { kind: "unmatched", label: "Unmatched" };
+}
+
+/** Rows a person should look at: suggested matches and unmatched food lines. */
+export function itemNeedsCheck(item: ReceiptFormItem): boolean {
+  const kind = itemReviewChip(item).kind;
+  return kind === "confirm" || kind === "unmatched";
+}
+
+/** The next row needing a check after `afterKey`, wrapping around; null when none. */
+export function nextItemNeedingCheck(
+  items: readonly ReceiptFormItem[],
+  afterKey: string | null,
+): ReceiptFormItem | null {
+  const start = afterKey ? items.findIndex((item) => item.key === afterKey) + 1 : 0;
+  for (let offset = 0; offset < items.length; offset += 1) {
+    const item = items[(start + offset) % items.length];
+    if (item && item.key !== afterKey && itemNeedsCheck(item)) {
+      return item;
+    }
+  }
+  return null;
+}

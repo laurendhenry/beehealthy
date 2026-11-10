@@ -15,7 +15,7 @@ import {
 import { PendingConfirmRecovery } from "../../components/receipt/PendingConfirmRecovery";
 import { CameraCapture } from "../../components/scan/CameraCapture";
 import type { PickedReceiptAsset } from "../../lib/receipt-image";
-import { scanViewState } from "../../lib/receipt-workflow";
+import { itemNeedsCheck, scanViewState } from "../../lib/receipt-workflow";
 import type { ReceiptPhase } from "../../types/receipt";
 
 /** Upload pipeline steps shown while a photo is being processed. */
@@ -65,7 +65,7 @@ export default function ScanScreen() {
     (error?.stage === "allocating" || error?.stage === "uploading");
   const canRetryParse =
     view === "failed" && receiptId !== null && !canRetryUpload && error?.stage !== "confirming";
-  const needsCheck = form?.items.filter((item) => item.matchStatus === "check").length ?? 0;
+  const needsCheck = form?.items.filter(itemNeedsCheck).length ?? 0;
 
   function openReview() {
     if (receiptId) {
