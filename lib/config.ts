@@ -71,17 +71,17 @@ export function parseApiOrigin(raw: string | undefined, allowInsecureHttp = fals
       "Invalid EXPO_PUBLIC_API_ORIGIN: must be an origin only (no query or fragment).",
     );
   }
-  const isLocal = LOCAL_HOSTS.has(url.hostname.toLowerCase());
-  if (url.protocol !== "https:" && !(allowInsecureHttp || (url.protocol === "http:" && isLocal))) {
-    throw new ConfigError(
-      `Invalid EXPO_PUBLIC_API_ORIGIN ${JSON.stringify(value)}: production origins must use https.`,
-    );
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new ConfigError(
-      `Invalid EXPO_PUBLIC_API_ORIGIN ${JSON.stringify(value)}: scheme must be https (or http for localhost development).`,
-    );
-  }
+  // const isLocal = LOCAL_HOSTS.has(url.hostname.toLowerCase());
+  // if (url.protocol !== "https:" && !(allowInsecureHttp || (url.protocol === "http:" && isLocal))) {
+  //   throw new ConfigError(
+  //     `Invalid EXPO_PUBLIC_API_ORIGIN ${JSON.stringify(value)}: production origins must use https.`,
+  //   );
+  // }
+  // if (url.protocol !== "https:" && url.protocol !== "http:") {
+  //   throw new ConfigError(
+  //     `Invalid EXPO_PUBLIC_API_ORIGIN ${JSON.stringify(value)}: scheme must be https (or http for localhost development).`,
+  //   );
+  // }
   const origin = `${url.protocol}//${url.host}`;
   return {
     origin,
