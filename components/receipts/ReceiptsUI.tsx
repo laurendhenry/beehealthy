@@ -527,8 +527,11 @@ export const receiptStyles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  itemName: {
+  itemText: {
     flex: 1,
+    gap: 4,
+  },
+  itemName: {
     fontSize: 13,
     color: colors.text,
   },

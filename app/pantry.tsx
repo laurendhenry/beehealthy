@@ -190,6 +190,13 @@ export default function PantryScreen() {
                   </View>
                   <View style={styles.itemInfo}>
                     <Text style={styles.name}>{row.item.name}</Text>
+                    {row.item.food &&
+                    row.item.food.name.trim().toLowerCase() !==
+                      row.item.name.trim().toLowerCase() ? (
+                      <Text style={styles.foodName} numberOfLines={1}>
+                        {row.item.food.name}
+                      </Text>
+                    ) : null}
                     <View style={styles.metaRow}>
                       <View style={styles.qtyBadge}>
                         <Text style={styles.qtyBadgeText}>
@@ -517,6 +524,11 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: "600",
     color: colors.text,
+  },
+  foodName: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.muted,
   },
   metaRow: {
     flexDirection: "row",

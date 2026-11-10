@@ -28,6 +28,8 @@
  */
 
 import { ConfigError, parseApiOrigin, readApiOriginEnv } from "../config";
+import type { FoodSummary } from "../../types/api";
+import { parseFoodSummary } from "./receipts";
 import {
   ApiError as TransportApiError,
   apiRequest as transportApiRequest,
@@ -253,6 +255,8 @@ export type PantryItem = {
   expiresAt: string | null;
   status: PantryStatus;
   foodId: string | null;
+  /** Linked catalog food for display (absent from older servers). */
+  food?: FoodSummary | null;
   receiptItemId: string;
   createdAt: string;
   updatedAt: string;
@@ -313,7 +317,12 @@ function assertPantryItem(value: unknown): PantryItem {
   ) {
     throw new ApiError("GATEWAY_ERROR", "Unexpected pantry item shape.");
   }
-  return value as PantryItem;
+  const item = value as PantryItem;
+  if (!("food" in row)) {
+    return item;
+  }
+  const food = parseFoodSummary(row["food"]);
+  return { ...item, food: food && food.id === item.foodId ? food : null };
 }
 
 function assertBasketSummary(value: unknown): BasketSummary {

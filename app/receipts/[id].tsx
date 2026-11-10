@@ -37,6 +37,8 @@ import {
 } from "../../components/receipts/ReceiptsUI";
 import { colors } from "../../constants/app-theme";
 import { useReceiptDetail } from "../../hooks/useReceiptDetail";
+import { ItemChip } from "../../components/review/ItemChip";
+import { receiptItemChip } from "../../lib/receipt-workflow";
 import {
   formatDateOnly,
   formatMoneyTotal,
@@ -291,9 +293,14 @@ export default function ReceiptDetailScreen() {
             ) : (
               resource.draft.items.map((item) => (
                 <View key={item.id} style={s.itemRow}>
-                  <Text style={s.itemName} numberOfLines={2}>
-                    {item.name.trim() || "Unnamed item"}
-                  </Text>
+                  <View style={s.itemText}>
+                    <Text style={s.itemName} numberOfLines={2}>
+                      {item.name.trim() || "Unnamed item"}
+                    </Text>
+                    <ItemChip
+                      chip={receiptItemChip(item, resource.status === "confirmed")}
+                    />
+                  </View>
                   <Text style={s.itemQuantity}>
                     ×{formatQuantityDisplay(item.quantity) || "1"}
                   </Text>

@@ -775,3 +775,18 @@ export function nextItemNeedingCheck(
   }
   return null;
 }
+
+/**
+ * Chip for a saved receipt line. Once a receipt is confirmed the person has
+ * accepted its foods, so a linked food reads as matched even if the automatic
+ * match was flagged for review before confirmation.
+ */
+export function receiptItemChip(
+  item: ReceiptResource["draft"]["items"][number],
+  confirmed: boolean,
+): ItemReviewChip {
+  const row = formItemFromResource(item);
+  return itemReviewChip(
+    confirmed && row.foodId ? { ...row, matchStatus: "matched" } : row,
+  );
+}

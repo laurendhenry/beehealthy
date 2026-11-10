@@ -17,6 +17,7 @@ import {
   itemNeedsCheck,
   itemReviewChip,
   nextItemNeedingCheck,
+  receiptItemChip,
   renameReceiptItem,
   scanViewState,
   selectReceiptItemFoodMatch,
@@ -381,4 +382,14 @@ test("review chips follow matchStatus, not just the presence of a food", () => {
   // Selecting a food is an explicit pick: the row no longer needs a check.
   const picked = selectReceiptItemFoodMatch(items[3], food);
   assert.equal(itemReviewChip(picked).kind, "matched");
+});
+
+test("saved receipt lines read as matched once confirmed", () => {
+  const item = {
+    id: ITEM_ID, name: "Milk", quantity: "1", lineTotal: "1.00", foodId: FOOD_ID,
+    matchStatus: "check" as const, food: { id: FOOD_ID, name: "Milk, whole", category: "dairy" },
+  };
+  assert.equal(receiptItemChip(item, false).kind, "confirm");
+  assert.deepEqual(receiptItemChip(item, true), { kind: "matched", label: "Milk, whole" });
+  assert.equal(receiptItemChip({ ...item, foodId: null, food: null }, true).kind, "unmatched");
 });
