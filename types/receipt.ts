@@ -8,12 +8,22 @@
  */
 
 import type {
+  FoodOption,
+  FoodSummary,
   ReceiptItemMatchStatus,
+  ReceiptItemReview,
   ReceiptResource,
   ReceiptStatus,
 } from "./api";
 
-export type { ReceiptItemMatchStatus, ReceiptResource, ReceiptStatus };
+export type {
+  FoodOption,
+  FoodSummary,
+  ReceiptItemMatchStatus,
+  ReceiptItemReview,
+  ReceiptResource,
+  ReceiptStatus,
+};
 
 export type ReceiptResourceItem = ReceiptResource["draft"]["items"][number];
 export type ReceiptResourceDraft = ReceiptResource["draft"];
@@ -113,6 +123,10 @@ export type ReceiptFormItem = {
   lineTotal: string;
   foodId: string | null;
   matchStatus: ReceiptItemMatchStatus;
+  /** Display-only: the linked food's name/category. Never sent on write. */
+  food?: FoodSummary | null;
+  /** Display-only review hints from the server. Never sent on write. */
+  review?: ReceiptItemReview;
 };
 
 export type ReceiptForm = {

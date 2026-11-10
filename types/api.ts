@@ -185,6 +185,34 @@ export type ReceiptStatus =
 
 export type ReceiptItemMatchStatus = "matched" | "check";
 
+/** A catalog food as shown to people (`food` on receipt and pantry items). */
+export interface FoodSummary {
+  id: string;
+  name: string;
+  category: string;
+}
+
+/**
+ * A pickable food: a catalog food (`id`) or a USDA reference record (`fdcId`)
+ * that must be resolved (`POST /foods/resolve`) into a catalog food first.
+ */
+export interface FoodOption {
+  id: string | null;
+  fdcId: number | null;
+  name: string;
+  category: string | null;
+  /** Ranking signal within one response only; never a certainty claim. */
+  score?: number;
+}
+
+/** Display-only review hints from the automatic match; never sent on write. */
+export interface ReceiptItemReview {
+  nonFood: boolean;
+  /** Suggested search text for picking a food. */
+  query: string;
+  suggestions: FoodOption[];
+}
+
 /** Full receipt resource (subset of fields the UI needs for review/detail). */
 export interface ReceiptResource {
   id: string;
@@ -202,6 +230,11 @@ export interface ReceiptResource {
       lineTotal: string;
       foodId: string | null;
       matchStatus: ReceiptItemMatchStatus;
+      /** Automatic match confidence 0-1; absent/null for user selections. */
+      matchConfidence?: number | null;
+      /** Linked catalog food, resolved by the server for display. */
+      food?: FoodSummary | null;
+      review?: ReceiptItemReview;
     }[];
   };
   warnings: string[];

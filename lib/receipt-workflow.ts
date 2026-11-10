@@ -281,6 +281,8 @@ export function formItemFromResource(
     lineTotal: item.lineTotal,
     foodId: item.foodId,
     matchStatus: item.matchStatus,
+    food: item.food ?? null,
+    ...(item.review ? { review: item.review } : {}),
   };
 }
 
@@ -366,16 +368,35 @@ export function renameReceiptItem(
     ...item,
     name,
     foodId: null,
+    food: null,
     matchStatus: "check",
   };
 }
 
-/** Attach a real backend food match (discovery `FoodMatch.id`). */
+/**
+ * Attach a real catalog food (a search result or a resolved reference food).
+ * An explicit pick is a user selection, so the row is no longer flagged.
+ */
 export function selectReceiptItemFoodMatch(
   item: ReceiptFormItem,
-  match: { id: string },
+  match: { id: string; name?: string; category?: string | null },
 ): ReceiptFormItem {
-  return { ...item, foodId: match.id, matchStatus: "matched" };
+  return {
+    ...item,
+    foodId: match.id,
+    food:
+      typeof match.name === "string"
+        ? { id: match.id, name: match.name, category: match.category ?? "other" }
+        : item.food?.id === match.id
+          ? item.food
+          : null,
+    matchStatus: "matched",
+  };
+}
+
+/** Unlink the food; the row needs a check again. */
+export function clearReceiptItemFoodMatch(item: ReceiptFormItem): ReceiptFormItem {
+  return { ...item, foodId: null, food: null, matchStatus: "check" };
 }
 
 let localItemCounter = 0;

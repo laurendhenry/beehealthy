@@ -8,7 +8,10 @@
  *
  * Endpoint contracts (all paths relative to `/api`, per plan section 4):
  * - GET    /foods/match            q (2-100 chars), limit 1-20; bare array
- * - GET    /swaps/suggest          optional limit 1-100; {items}
+ * - GET    /foods/search           q (2-100 chars), limit 1-20; bare FoodOption[]
+ *                                  (catalog `id` or reference `fdcId`; read-only)
+ * - POST   /foods/resolve          {fdcId}; promotes a reference record → FoodSummary
+ * - GET    /swaps/suggest          optional limit 1-100; {items, generating}
  * - GET    /swaps                  required state=saved|dismissed; {items}
  * - PUT    /swaps/:id/state        {state:"saved"|"dismissed"}; {swapId,state}
  * - DELETE /swaps/:id/state        204; reset state (individual only, no bulk)
@@ -27,6 +30,10 @@ import {
   buildQuery,
   type ApiRequestOptions,
 } from "./pantry";
+import { parseFoodOption, parseFoodSummary } from "./receipts";
+import type { FoodOption, FoodSummary } from "../../types/api";
+
+export type { FoodOption, FoodSummary };
 
 // ---------------------------------------------------------------------------
 // Wire DTOs
@@ -168,18 +175,77 @@ export async function searchFoods(
   return raw.map(assertFoodMatch);
 }
 
-export async function suggestSwaps(
+/**
+ * Review food picker search: ranked catalog foods (`id`) and USDA reference
+ * records (`fdcId`, resolve before linking). Same query rules as
+ * `searchFoods`; malformed rows are dropped rather than failing the list.
+ */
+export async function searchFoodOptions(
+  q: string,
   options: { limit?: number; signal?: AbortSignal | null } = {},
-): Promise<SwapSuggestion[]> {
+): Promise<FoodOption[]> {
+  const query = q.trim();
+  if (query.length < 2) return [];
+  if (query.length > 100) {
+    throw new ApiError(
+      "VALIDATION_ERROR",
+      "Search needs 100 characters or fewer.",
+    );
+  }
+  const limit = clampLimit(options.limit, 1, 20, 10);
+  const raw = await apiRequest<unknown>(
+    `/foods/search${buildQuery({ q: query, limit })}`,
+    { signal: options.signal ?? null },
+  );
+  if (!Array.isArray(raw)) {
+    throw new ApiError("GATEWAY_ERROR", "Unexpected food search shape.");
+  }
+  return raw
+    .map(parseFoodOption)
+    .filter((option): option is FoodOption => option !== null);
+}
+
+/** Promote a picked reference record into a catalog food that can be linked. */
+export async function resolveFood(
+  fdcId: number,
+  signal?: AbortSignal | null,
+): Promise<FoodSummary> {
+  const raw = await apiRequest<unknown>("/foods/resolve", {
+    method: "POST",
+    body: { fdcId },
+    signal: signal ?? null,
+  });
+  const food = parseFoodSummary(raw);
+  if (!food) {
+    throw new ApiError("GATEWAY_ERROR", "Unexpected food shape.");
+  }
+  return food;
+}
+
+export type SwapSuggestionsResult = {
+  items: SwapSuggestion[];
+  /** True while background generation is pending for the pantry. */
+  generating: boolean;
+};
+
+export async function getSwapSuggestions(
+  options: { limit?: number; signal?: AbortSignal | null } = {},
+): Promise<SwapSuggestionsResult> {
   const limit = clampLimit(options.limit, 1, 100, 20);
-  const raw = await apiRequest<{ items: unknown }>(
+  const raw = await apiRequest<{ items: unknown; generating?: unknown }>(
     `/swaps/suggest${buildQuery({ limit })}`,
     { signal: options.signal ?? null },
   );
   if (typeof raw !== "object" || raw === null || !Array.isArray(raw.items)) {
     throw new ApiError("GATEWAY_ERROR", "Unexpected swaps response shape.");
   }
-  return raw.items.map(assertSwap);
+  return { items: raw.items.map(assertSwap), generating: raw.generating === true };
+}
+
+export async function suggestSwaps(
+  options: { limit?: number; signal?: AbortSignal | null } = {},
+): Promise<SwapSuggestion[]> {
+  return (await getSwapSuggestions(options)).items;
 }
 
 export async function listSwaps(

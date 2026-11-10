@@ -47,6 +47,7 @@ import {
 import {
   buildReceiptConfirmBody,
   buildReceiptWrite,
+  clearReceiptItemFoodMatch,
   createEmptyFormItem,
   createIdempotencyKey,
   errorCode,
@@ -177,7 +178,10 @@ export type ReceiptContextValue = {
   ) => void;
   addItem: () => void;
   removeItem: (key: string) => void;
-  selectFoodMatch: (key: string, match: { id: string }) => void;
+  selectFoodMatch: (
+    key: string,
+    match: { id: string; name?: string; category?: string | null },
+  ) => void;
   clearFoodMatch: (key: string) => void;
   saveDraft: () => Promise<ReceiptSaveOutcome>;
   confirm: () => Promise<ReceiptConfirmOutcome>;
@@ -1231,7 +1235,7 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
   );
 
   const selectFoodMatch = useCallback(
-    (key: string, match: { id: string }) => {
+    (key: string, match: { id: string; name?: string; category?: string | null }) => {
       const current = stateRef.current;
       if (!current.form || !canEditNow(current)) {
         return;
@@ -1258,7 +1262,7 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
         form: {
           ...current.form,
           items: current.form.items.map((item) =>
-            item.key === key ? { ...item, foodId: null, matchStatus: "check" as const } : item,
+            item.key === key ? clearReceiptItemFoodMatch(item) : item,
           ),
         },
         formDirty: true,

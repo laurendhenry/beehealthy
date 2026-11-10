@@ -7,6 +7,7 @@ import {
   getReceiptImage, getReceiptStatus, listReceipts, patchReceipt, requestReceiptParse,
 } from "../lib/api/receipts";
 import type { ReceiptConfirmBody, ReceiptResource } from "../types/receipt";
+import { buildReceiptWrite, formFromResource } from "../lib/receipt-workflow";
 
 const BASE = "https://api.example.test/api";
 const ID = "eac82dd9-6529-4d29-9f17-b6ba2f168846";
@@ -67,7 +68,7 @@ describe("receipt API: live wire contracts", () => {
     assert.deepEqual(body(t.calls[0]), {});
   });
 
-  it("creates manual/example receipts on the server with exact retry payloads", async () => {
+  it("creates manual receipts on the server with exact retry payloads", async () => {
     const t = transport({ ...resource, status: "confirmed" }, 201);
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const saved = await confirmReceipt(manual, "manual-confirm-key", { deps: t.deps });
@@ -130,5 +131,59 @@ describe("receipt API: live wire contracts", () => {
     const t = transport({ status: "confirmed" });
     await assert.rejects(confirmReceipt(manual, "invalid", { deps: t.deps }),
       (error: unknown) => error instanceof ApiError && error.code === "INVALID_RESPONSE");
+  });
+
+  it("parses display-only food, review hints and confidence and never writes them back", async () => {
+    const FOOD_ID = "0d6e0c2b-0f62-4f79-9a0b-3b8f3b7e2d11";
+    const t = transport({
+      ...resource,
+      draft: {
+        ...draft,
+        items: [
+          {
+            ...draft.items[0], foodId: FOOD_ID, matchStatus: "check", matchConfidence: "0.7",
+            matchMeta: { model: "internal" },
+            food: { id: FOOD_ID, name: "Beans, black", category: "protein" },
+            review: {
+              nonFood: false, query: "black beans",
+              suggestions: [
+                { id: FOOD_ID, fdcId: null, name: "Beans, black", category: "protein", score: 0.9 },
+                { id: null, fdcId: 173_735, name: "Beans, black, canned", category: "protein" },
+                { id: null, fdcId: null, name: "Unusable" },
+              ],
+            },
+          },
+          { id: ITEM_ID, name: "Bag", quantity: "1", lineTotal: "0.10", foodId: null, matchStatus: "check",
+            food: null, review: { nonFood: true, query: "bag", suggestions: [] } },
+        ],
+      },
+    });
+    const parsed = await getReceipt(ID, { deps: t.deps });
+    const [beans, bag] = parsed.draft.items;
+    assert.equal(beans.matchConfidence, 0.7);
+    assert.deepEqual(beans.food, { id: FOOD_ID, name: "Beans, black", category: "protein" });
+    assert.equal("matchMeta" in beans, false);
+    assert.deepEqual(beans.review, {
+      nonFood: false, query: "black beans",
+      suggestions: [
+        { id: FOOD_ID, fdcId: null, name: "Beans, black", category: "protein", score: 0.9 },
+        { id: null, fdcId: 173_735, name: "Beans, black, canned", category: "protein" },
+      ],
+    });
+    assert.equal(bag.food, null);
+    assert.equal(bag.review?.nonFood, true);
+    const form = formFromResource(parsed);
+    assert.equal(form.items[0].food?.name, "Beans, black");
+    assert.equal(form.items[0].matchStatus, "check");
+    const write = buildReceiptWrite(form);
+    assert.deepEqual(Object.keys(write.items[0]).sort(), ["foodId", "id", "lineTotal", "name", "quantity"]);
+  });
+
+  it("tolerates receipts from older servers without food or review fields", async () => {
+    const t = transport(resource);
+    const [item] = (await getReceipt(ID, { deps: t.deps })).draft.items;
+    assert.equal("food" in item, false);
+    assert.equal("review" in item, false);
+    assert.equal(formFromResource({ ...resource }).items[0].food, null);
   });
 });

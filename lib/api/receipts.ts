@@ -9,8 +9,11 @@
 
 import { ApiError, apiRequest, type TransportDeps } from "./client";
 import type {
+  FoodOption,
+  FoodSummary,
   ReceiptConfirmBody,
   ReceiptImageTicket,
+  ReceiptItemReview,
   ReceiptListSummary,
   ReceiptPage,
   ReceiptPatchBody,
@@ -92,6 +95,66 @@ function parseErrorField(value: unknown): { code: string } | null {
 }
 
 /** Parse and validate a `ReceiptResource`. */
+/** `matchConfidence` is a decimal string on the wire; tolerate numbers. */
+function parseConfidence(value: unknown): number | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  const number =
+    typeof value === "string" ? Number(value) : typeof value === "number" ? value : NaN;
+  return Number.isFinite(number) && number >= 0 && number <= 1 ? number : undefined;
+}
+
+export function parseFoodSummary(value: unknown): FoodSummary | null {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string") {
+    return null;
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    category: typeof value.category === "string" ? value.category : "other",
+  };
+}
+
+/** A catalog (`id`) or reference (`fdcId`) option; null when neither is usable. */
+export function parseFoodOption(value: unknown): FoodOption | null {
+  if (!isRecord(value) || typeof value.name !== "string") {
+    return null;
+  }
+  const id = typeof value.id === "string" ? value.id : null;
+  const fdcId =
+    typeof value.fdcId === "number" && Number.isInteger(value.fdcId) && value.fdcId > 0
+      ? value.fdcId
+      : null;
+  if (!id && fdcId === null) {
+    return null;
+  }
+  return {
+    id,
+    fdcId: id ? null : fdcId,
+    name: value.name,
+    category: typeof value.category === "string" ? value.category : null,
+    ...(typeof value.score === "number" && Number.isFinite(value.score)
+      ? { score: value.score }
+      : {}),
+  };
+}
+
+function parseReview(value: unknown): ReceiptItemReview | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return {
+    nonFood: value.nonFood === true,
+    query: typeof value.query === "string" ? value.query : "",
+    suggestions: Array.isArray(value.suggestions)
+      ? value.suggestions
+          .map(parseFoodOption)
+          .filter((option): option is FoodOption => option !== null)
+      : [],
+  };
+}
+
 export function parseReceiptResource(raw: unknown): ReceiptResource {
   const record = requireRecord(raw, "receipt");
   const draft = requireRecord(record.draft, "receipt draft");
@@ -114,14 +177,29 @@ export function parseReceiptResource(raw: unknown): ReceiptResource {
       items: items.map((item) => {
         const row = requireRecord(item, "receipt item");
         const matchStatus = row.matchStatus === "matched" ? "matched" : "check";
-        return {
+        const foodId = typeof row.foodId === "string" ? row.foodId : null;
+        const parsed: ReceiptResource["draft"]["items"][number] = {
           id: requireString(row.id, "receipt item id"),
           name: requireString(row.name, "receipt item name"),
           quantity: requireString(row.quantity, "receipt item quantity"),
           lineTotal: requireString(row.lineTotal, "receipt item total"),
-          foodId: typeof row.foodId === "string" ? row.foodId : null,
+          foodId,
           matchStatus,
         };
+        const confidence = parseConfidence(row.matchConfidence);
+        if (confidence !== undefined) {
+          parsed.matchConfidence = confidence;
+        }
+        if ("food" in row) {
+          // A food summary for a different id than the link is ignored.
+          const food = parseFoodSummary(row.food);
+          parsed.food = food && food.id === foodId ? food : null;
+        }
+        const review = parseReview(row.review);
+        if (review) {
+          parsed.review = review;
+        }
+        return parsed;
       }),
     },
     warnings,
