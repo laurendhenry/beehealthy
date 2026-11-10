@@ -4,7 +4,6 @@ import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { colors } from "../constants/app-theme";
 import { useReceipt } from "../context/ReceiptContext";
-import { searchFoods, type FoodMatch } from "../lib/api/discovery";
 import { receiptDetailHref } from "../lib/api/receipt-history";
 import { formatCents, warningCopy } from "../lib/receipt-workflow";
 import {
@@ -15,6 +14,7 @@ import {
   ui,
 } from "../components/receipt/ReceiptUI";
 import { PendingConfirmRecovery } from "../components/receipt/PendingConfirmRecovery";
+import { FoodPicker } from "../components/review/FoodPicker";
 
 export default function ReviewReceiptScreen() {
   const params = useLocalSearchParams<{ receiptId?: string }>();
@@ -59,12 +59,7 @@ export default function ReviewReceiptScreen() {
   const [saving, setSaving] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [matchForKey, setMatchForKey] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<FoodMatch[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
   const requestedRef = useRef<string | null>(null);
-  const searchSeq = useRef(0);
 
   // Load the persisted receipt named by the route, independent of whatever
   // flow happens to be live in this session.
@@ -136,36 +131,6 @@ export default function ReviewReceiptScreen() {
       router.back();
     } else {
       router.replace("/scan");
-    }
-  }
-
-  async function runSearch() {
-    const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      setResults([]);
-      setSearchError("Type at least two characters to search foods.");
-      return;
-    }
-    const sequence = ++searchSeq.current;
-    setSearching(true);
-    setSearchError(null);
-    try {
-      const matches = await searchFoods(trimmed, { limit: 8 });
-      if (searchSeq.current === sequence) {
-        setResults(matches);
-        if (matches.length === 0) {
-          setSearchError("No matching foods found. You can keep the item unmatched.");
-        }
-      }
-    } catch {
-      if (searchSeq.current === sequence) {
-        setResults([]);
-        setSearchError("Food search is unavailable right now. You can keep the item unmatched.");
-      }
-    } finally {
-      if (searchSeq.current === sequence) {
-        setSearching(false);
-      }
     }
   }
 
@@ -486,83 +451,50 @@ export default function ReviewReceiptScreen() {
               </View>
 
               {canEdit ? (
-                matchForKey === item.key ? (
-                  <View style={styles.matchPanel}>
-                    <ReceiptField
-                      label="Search foods"
-                      value={query}
-                      autoCapitalize="none"
-                      placeholder="e.g. oat milk"
-                      onChangeText={setQuery}
-                    />
-                    <View style={styles.actionRow}>
-                      <ReceiptButton
-                        title={searching ? "Searching…" : "Search"}
-                        secondary
-                        disabled={searching}
-                        onPress={() => void runSearch()}
-                      />
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => {
-                          setMatchForKey(null);
-                          setSearchError(null);
-                        }}
-                      >
-                        <Text style={ui.link}>Cancel</Text>
-                      </Pressable>
-                    </View>
-                    {searchError ? <Text style={ui.muted}>{searchError}</Text> : null}
-                    {results.map((match) => (
-                      <Pressable
-                        key={match.id}
-                        accessibilityRole="button"
-                        onPress={() => {
-                          selectFoodMatch(item.key, { id: match.id });
-                          setMatchForKey(null);
-                          setSearchError(null);
-                        }}
-                        style={styles.resultRow}
-                      >
-                        <Text style={ui.text}>{match.name}</Text>
-                        <Text style={ui.muted}>{match.category}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                ) : (
-                  <View style={styles.actionRow}>
+                <View style={styles.actionRow}>
+                  <Pressable accessibilityRole="button" onPress={() => setMatchForKey(item.key)}>
+                    <Text style={ui.link}>
+                      {item.foodId ? "Change food match" : "Match to a food"}
+                    </Text>
+                  </Pressable>
+                  {item.foodId ? (
                     <Pressable
                       accessibilityRole="button"
-                      onPress={() => {
-                        setMatchForKey(item.key);
-                        setQuery(item.name);
-                        setResults([]);
-                        setSearchError(null);
-                      }}
+                      onPress={() => clearFoodMatch(item.key)}
                     >
-                      <Text style={ui.link}>
-                        {item.foodId ? "Change food match" : "Match to a food"}
-                      </Text>
+                      <Text style={ui.link}>Clear match</Text>
                     </Pressable>
-                    {item.foodId ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => clearFoodMatch(item.key)}
-                      >
-                        <Text style={ui.link}>Clear match</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                )
+                  ) : null}
+                </View>
               ) : null}
 
               {item.foodId ? (
                 <Text style={ui.muted}>
-                  Linked to a backend food id. Editing the item name clears this match.
+                  Food: {item.food?.name ?? "linked food"}. Editing the item name clears this match.
                 </Text>
               ) : null}
             </ReceiptCard>
           ))}
+
+          {(() => {
+            const pickerItem = form.items.find((row) => row.key === matchForKey);
+            return (
+              <FoodPicker
+                visible={pickerItem !== undefined && canEdit}
+                itemName={pickerItem?.name ?? ""}
+                initialQuery={pickerItem?.review?.query || pickerItem?.name || ""}
+                suggestions={pickerItem?.review?.suggestions ?? []}
+                currentFoodId={pickerItem?.foodId ?? null}
+                onSelect={(food) => {
+                  if (pickerItem) {
+                    selectFoodMatch(pickerItem.key, food);
+                  }
+                  setMatchForKey(null);
+                }}
+                onClose={() => setMatchForKey(null)}
+              />
+            );
+          })()}
 
           {canEdit ? (
             <ReceiptButton
@@ -661,14 +593,5 @@ const styles = StyleSheet.create({
   },
   checkBadge: {
     backgroundColor: "#F2E8D8",
-  },
-  matchPanel: {
-    gap: 8,
-  },
-  resultRow: {
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-    gap: 2,
   },
 });
