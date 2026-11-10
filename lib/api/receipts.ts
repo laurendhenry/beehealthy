@@ -116,22 +116,24 @@ export function parseFoodSummary(value: unknown): FoodSummary | null {
   };
 }
 
-/** A catalog (`id`) or reference (`fdcId`) option; null when neither is usable. */
+const REFERENCE_ID = /^fd_[A-Za-z0-9]{6,32}$/;
+
+/** A catalog (`id`) or reference (`referenceId`) option; null when neither is usable. */
 export function parseFoodOption(value: unknown): FoodOption | null {
   if (!isRecord(value) || typeof value.name !== "string") {
     return null;
   }
   const id = typeof value.id === "string" ? value.id : null;
-  const fdcId =
-    typeof value.fdcId === "number" && Number.isInteger(value.fdcId) && value.fdcId > 0
-      ? value.fdcId
+  const referenceId =
+    typeof value.referenceId === "string" && REFERENCE_ID.test(value.referenceId)
+      ? value.referenceId
       : null;
-  if (!id && fdcId === null) {
+  if (!id && referenceId === null) {
     return null;
   }
   return {
     id,
-    fdcId: id ? null : fdcId,
+    referenceId: id ? null : referenceId,
     name: value.name,
     category: typeof value.category === "string" ? value.category : null,
     ...(typeof value.score === "number" && Number.isFinite(value.score)

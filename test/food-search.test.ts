@@ -10,7 +10,7 @@ test("only searches trimmed terms of at least two characters", () => {
 });
 
 test("a response only shows for the exact term it answered", () => {
-  const oats = [{ id: "f1", fdcId: null, name: "Oats", category: "grains" }];
+  const oats = [{ id: "f1", referenceId: null, name: "Oats", category: "grains" }];
   assert.deepEqual(foodSearchView("", null), { status: "idle", results: [], error: null });
   assert.equal(foodSearchView("oat", null).status, "loading");
   // A slow answer for an earlier term is stale.
@@ -30,6 +30,6 @@ test("a response only shows for the exact term it answered", () => {
 });
 
 test("food option keys distinguish catalog and reference records", () => {
-  assert.equal(foodOptionKey({ id: "f1", fdcId: null, name: "Oats", category: null }), "food:f1");
-  assert.equal(foodOptionKey({ id: null, fdcId: 7, name: "Oats", category: null }), "usda:7");
+  assert.equal(foodOptionKey({ id: "f1", referenceId: null, name: "Oats", category: null }), "food:f1");
+  assert.equal(foodOptionKey({ id: null, referenceId: "fd_rolledOats1", name: "Oats", category: null }), "ref:fd_rolledOats1");
 });

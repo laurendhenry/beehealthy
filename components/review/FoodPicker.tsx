@@ -3,8 +3,8 @@
  *
  * Opens prefilled with the server's suggested query and lists the matcher's
  * suggestions before the person types. Results come from `/foods/search`;
- * picking a USDA reference result first resolves (promotes) it into a catalog
- * food, so the receipt only ever links real catalog ids.
+ * picking an OpenNutrition reference result first resolves (promotes) it into
+ * a catalog food, so the receipt only ever links real catalog ids.
  */
 
 import { useState } from "react";
@@ -81,13 +81,13 @@ function PickerContent({
       onSelect({ id: option.id, name: option.name, category: option.category ?? "other" });
       return;
     }
-    if (option.fdcId === null) {
+    if (option.referenceId === null) {
       return;
     }
     const key = foodOptionKey(option);
     setResolving(key);
     try {
-      onSelect(await resolveFood(option.fdcId));
+      onSelect(await resolveFood(option.referenceId));
     } catch {
       setResolveError("That food could not be added right now. Try again or pick another.");
     } finally {

@@ -193,12 +193,13 @@ export interface FoodSummary {
 }
 
 /**
- * A pickable food: a catalog food (`id`) or a USDA reference record (`fdcId`)
- * that must be resolved (`POST /foods/resolve`) into a catalog food first.
+ * A pickable food: a catalog food (`id`) or an OpenNutrition reference record
+ * (`referenceId`, `fd_…`) that must be resolved (`POST /foods/resolve`) into a
+ * catalog food first.
  */
 export interface FoodOption {
   id: string | null;
-  fdcId: number | null;
+  referenceId: string | null;
   name: string;
   category: string | null;
   /** Ranking signal within one response only; never a certainty claim. */

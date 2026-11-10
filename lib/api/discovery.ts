@@ -9,8 +9,8 @@
  * Endpoint contracts (all paths relative to `/api`, per plan section 4):
  * - GET    /foods/match            q (2-100 chars), limit 1-20; bare array
  * - GET    /foods/search           q (2-100 chars), limit 1-20; bare FoodOption[]
- *                                  (catalog `id` or reference `fdcId`; read-only)
- * - POST   /foods/resolve          {fdcId}; promotes a reference record → FoodSummary
+ *                                  (catalog `id` or reference `referenceId`; read-only)
+ * - POST   /foods/resolve          {referenceId}; promotes a reference record → FoodSummary
  * - GET    /swaps/suggest          optional limit 1-100; {items, generating}
  * - GET    /swaps                  required state=saved|dismissed; {items}
  * - PUT    /swaps/:id/state        {state:"saved"|"dismissed"}; {swapId,state}
@@ -21,7 +21,7 @@
  * - Match `score` is a ranking signal, never a certainty claim.
  * - Saved/dismissed retrieval does not reapply preference filtering: never
  *   promise that saved cards remain compatible or allergen-safe.
- * - USDA catalog detail stays server-side; only id/name/category/score cross.
+ * - Reference nutrition detail stays server-side; only ids/name/category/score cross.
  */
 
 import {
@@ -176,8 +176,8 @@ export async function searchFoods(
 }
 
 /**
- * Review food picker search: ranked catalog foods (`id`) and USDA reference
- * records (`fdcId`, resolve before linking). Same query rules as
+ * Review food picker search: ranked catalog foods (`id`) and OpenNutrition
+ * reference records (`referenceId`, resolve before linking). Same query rules as
  * `searchFoods`; malformed rows are dropped rather than failing the list.
  */
 export async function searchFoodOptions(
@@ -207,12 +207,12 @@ export async function searchFoodOptions(
 
 /** Promote a picked reference record into a catalog food that can be linked. */
 export async function resolveFood(
-  fdcId: number,
+  referenceId: string,
   signal?: AbortSignal | null,
 ): Promise<FoodSummary> {
   const raw = await apiRequest<unknown>("/foods/resolve", {
     method: "POST",
-    body: { fdcId },
+    body: { referenceId },
     signal: signal ?? null,
   });
   const food = parseFoodSummary(raw);

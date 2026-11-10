@@ -147,9 +147,9 @@ describe("receipt API: live wire contracts", () => {
             review: {
               nonFood: false, query: "black beans",
               suggestions: [
-                { id: FOOD_ID, fdcId: null, name: "Beans, black", category: "protein", score: 0.9 },
-                { id: null, fdcId: 173_735, name: "Beans, black, canned", category: "protein" },
-                { id: null, fdcId: null, name: "Unusable" },
+                { id: FOOD_ID, referenceId: null, name: "Beans, black", category: "protein", score: 0.9 },
+                { id: null, referenceId: "fd_blackBeans1", name: "Black Beans, Canned", category: "protein" },
+                { id: null, referenceId: null, name: "Unusable" },
               ],
             },
           },
@@ -166,8 +166,8 @@ describe("receipt API: live wire contracts", () => {
     assert.deepEqual(beans.review, {
       nonFood: false, query: "black beans",
       suggestions: [
-        { id: FOOD_ID, fdcId: null, name: "Beans, black", category: "protein", score: 0.9 },
-        { id: null, fdcId: 173_735, name: "Beans, black, canned", category: "protein" },
+        { id: FOOD_ID, referenceId: null, name: "Beans, black", category: "protein", score: 0.9 },
+        { id: null, referenceId: "fd_blackBeans1", name: "Black Beans, Canned", category: "protein" },
       ],
     });
     assert.equal(bag.food, null);

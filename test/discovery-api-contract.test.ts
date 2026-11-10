@@ -35,15 +35,15 @@ describe("food search and resolve", () => {
   it("searches catalog and reference options, dropping malformed rows", async () => {
     respond = () =>
       json([
-        { id: "f1", fdcId: null, name: "Oats", category: "grains", score: 0.8 },
-        { id: null, fdcId: 169_705, name: "Oats, rolled", category: "grains" },
-        { id: null, fdcId: null, name: "No identity" },
+        { id: "f1", referenceId: null, name: "Oats", category: "grains", score: 0.8 },
+        { id: null, referenceId: "fd_rolledOats1", name: "Rolled Oats", category: "grains" },
+        { id: null, referenceId: null, name: "No identity" },
         { name: 42 },
       ]);
     const options = await searchFoodOptions(" oat ", { limit: 50 });
     assert.deepEqual(options, [
-      { id: "f1", fdcId: null, name: "Oats", category: "grains", score: 0.8 },
-      { id: null, fdcId: 169_705, name: "Oats, rolled", category: "grains" },
+      { id: "f1", referenceId: null, name: "Oats", category: "grains", score: 0.8 },
+      { id: null, referenceId: "fd_rolledOats1", name: "Rolled Oats", category: "grains" },
     ]);
     const url = new URL(calls[0].url);
     assert.equal(url.pathname, "/api/foods/search");
@@ -58,19 +58,19 @@ describe("food search and resolve", () => {
 
   it("resolves a reference record into a catalog food", async () => {
     respond = () => json({ id: "f9", name: "Oats, rolled", category: "grains" });
-    assert.deepEqual(await resolveFood(169_705), {
+    assert.deepEqual(await resolveFood("fd_rolledOats1"), {
       id: "f9",
       name: "Oats, rolled",
       category: "grains",
     });
     assert.equal(new URL(calls[0].url).pathname, "/api/foods/resolve");
     assert.equal(calls[0].init.method, "POST");
-    assert.deepEqual(JSON.parse(String(calls[0].init.body)), { fdcId: 169_705 });
+    assert.deepEqual(JSON.parse(String(calls[0].init.body)), { referenceId: "fd_rolledOats1" });
   });
 
   it("rejects a malformed resolve response", async () => {
     respond = () => json({ name: "No id" });
-    await assert.rejects(resolveFood(1), (error: unknown) => error instanceof ApiError);
+    await assert.rejects(resolveFood("fd_rolledOats1"), (error: unknown) => error instanceof ApiError);
   });
 });
 

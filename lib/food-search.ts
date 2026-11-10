@@ -45,5 +45,5 @@ export function foodSearchView(
 
 /** Stable identity for list keys and de-duplication. */
 export function foodOptionKey(option: FoodOption): string {
-  return option.id ? `food:${option.id}` : `usda:${option.fdcId}`;
+  return option.id ? `food:${option.id}` : `ref:${option.referenceId}`;
 }
