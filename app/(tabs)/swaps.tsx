@@ -33,6 +33,18 @@ const TABS: { id: SwapTab; label: string }[] = [
   { id: "dismissed", label: "Dismissed" },
 ];
 
+const GENERATING_COPY = {
+  title: "Finding healthier swaps for your latest groceries…",
+  description:
+    "This usually takes a few minutes after you save a receipt. We’ll check again automatically while you’re here.",
+};
+
+const NO_SWAPS_COPY = {
+  title: "No swaps yet.",
+  description:
+    "Swaps come from foods in your pantry. Save a receipt with matched foods and ideas appear here once they’re ready.",
+};
+
 const EMPTY_COPY: Record<SwapTab, { title: string; description: string }> = {
   suggested: {
     title: "You’re all caught up.",
@@ -68,7 +80,12 @@ export default function SwapsScreen() {
     dismissed: swaps.dismissed.length,
   };
 
-  const emptyCopy = EMPTY_COPY[tab];
+  let emptyCopy = EMPTY_COPY[tab];
+  if (tab === "suggested" && swaps.generating) {
+    emptyCopy = GENERATING_COPY;
+  } else if (tab === "suggested" && swaps.saved.length + swaps.dismissed.length === 0) {
+    emptyCopy = NO_SWAPS_COPY;
+  }
 
   return (
     <SafeAreaView
@@ -84,7 +101,7 @@ export default function SwapsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={swaps.loading}
+            refreshing={swaps.refreshing}
             onRefresh={swaps.refresh}
             tintColor={colors.primary}
             colors={[colors.primary]}
@@ -169,6 +186,9 @@ export default function SwapsScreen() {
             // Error cards render above regardless of data; this only avoids a
             // misleading “all caught up” placeholder when the load failed.
             <View style={styles.emptyState}>
+              {tab === "suggested" && swaps.generating ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : null}
               <Text style={styles.emptyTitle}>{emptyCopy.title}</Text>
 
               <Text style={styles.emptyDescription}>

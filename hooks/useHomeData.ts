@@ -11,8 +11,9 @@
  * - No mock fallback: failures surface per card with retry.
  */
 
-import { useCallback, useMemo } from "react";
-import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useMemo } from "react";
+import { AppState } from "react-native";
+import { useFocusEffect, useIsFocused } from "expo-router";
 
 import { useAppData, useServerQuery } from "../context/AppDataContext";
 import {
@@ -138,7 +139,7 @@ export function useHomeData(): HomeData {
     load: getCurrentRecommendation,
   });
 
-  // Revalidate on screen focus (covers foreground + tab switches).
+  // Revalidate on screen focus (tab switches and returning from other screens).
   useFocusEffect(
     useCallback(() => {
       if (!enabled) return;
@@ -155,6 +156,17 @@ export function useHomeData(): HomeData {
     recommendation.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Focus does not fire when the app returns from the background, but swaps
+  // and recommendations change in the background, so refetch then too.
+  const focused = useIsFocused();
+  useEffect(() => {
+    if (!enabled || !focused) return;
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (next === "active") refreshAll();
+    });
+    return () => subscription.remove();
+  }, [enabled, focused, refreshAll]);
 
   return useMemo<HomeData>(() => {
     const toCardError = (

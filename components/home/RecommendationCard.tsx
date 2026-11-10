@@ -78,7 +78,7 @@ export function RecommendationCard({
     </>
   ) : (
     <Text style={styles.recommendationDescription}>
-      No recommendation right now — scan another receipt and check back.
+      No recommendation yet. After you save a receipt, swap ideas take a few minutes to appear.
     </Text>
   );
 

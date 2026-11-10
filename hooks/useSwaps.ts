@@ -12,7 +12,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useFocusEffect } from "expo-router";
+import { AppState } from "react-native";
+import { useFocusEffect, useIsFocused } from "expo-router";
 
 import { useAppData } from "../context/AppDataContext";
 import {
@@ -20,13 +21,14 @@ import {
   isUnknownOutcome,
 } from "../lib/api/pantry";
 import {
+  getSwapSuggestions,
   listSwaps,
   resetSwapState,
   setSwapState,
-  suggestSwaps,
   type SwapState,
   type SwapSuggestion,
 } from "../lib/api/discovery";
+import { SWAP_POLL_INTERVAL_MS, shouldPollSwaps } from "../lib/swap-polling";
 
 export type SwapCardState = {
   swap: SwapSuggestion;
@@ -39,6 +41,10 @@ export type UseSwapsResult = {
   saved: SwapCardState[];
   dismissed: SwapCardState[];
   loading: boolean;
+  /** True only while a pull-to-refresh the person started is in flight. */
+  refreshing: boolean;
+  /** Background swap generation is still pending for the pantry. */
+  generating: boolean;
   error: string | null;
   refresh: () => void;
   retry: () => void;
@@ -64,6 +70,11 @@ export function useSwaps(): UseSwapsResult {
 
   const [lists, setLists] = useState<Lists>(EMPTY);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  /** Start of the current generating stretch; bounds polling. */
+  const pollStartedAtRef = useRef<number | null>(null);
+  const focused = useIsFocused();
   const [error, setError] = useState<string | null>(null);
   const [pendingIds, setPendingIds] = useState<Record<string, boolean>>({});
   const [cardErrors, setCardErrors] = useState<Record<string, string | null>>({});
@@ -77,6 +88,8 @@ export function useSwaps(): UseSwapsResult {
     setError(null);
     setPendingIds({});
     setCardErrors({});
+    setGenerating(false);
+    pollStartedAtRef.current = null;
   }, [userId]);
 
   const load = useCallback(async () => {
@@ -86,13 +99,19 @@ export function useSwaps(): UseSwapsResult {
     setLoading(true);
     setError(null);
     try {
-      const [suggested, saved, dismissed] = await Promise.all([
-        suggestSwaps({ signal: controller.signal }),
+      const [suggestions, saved, dismissed] = await Promise.all([
+        getSwapSuggestions({ signal: controller.signal }),
         listSwaps("saved", controller.signal),
         listSwaps("dismissed", controller.signal),
       ]);
       if (runIdRef.current !== runId) return;
-      setLists({ suggested, saved, dismissed });
+      setLists({ suggested: suggestions.items, saved, dismissed });
+      setGenerating(suggestions.generating);
+      if (!suggestions.generating) {
+        pollStartedAtRef.current = null;
+      } else if (pollStartedAtRef.current === null) {
+        pollStartedAtRef.current = Date.now();
+      }
     } catch (err) {
       if (runIdRef.current !== runId) return;
       if (err instanceof Error && err.name === "AbortError") return;
@@ -102,7 +121,10 @@ export function useSwaps(): UseSwapsResult {
           : "Couldn't load suggestions. Try again.",
       );
     } finally {
-      if (runIdRef.current === runId) setLoading(false);
+      if (runIdRef.current === runId) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -118,7 +140,42 @@ export function useSwaps(): UseSwapsResult {
     }, [userId]),
   );
 
+  // Coming back to the app while this tab is visible refetches; swaps are
+  // generated in the background, so they may have appeared meanwhile.
+  useEffect(() => {
+    if (userId === null || !focused) return;
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (next === "active") void load();
+    });
+    return () => subscription.remove();
+  }, [userId, focused, load]);
+
+  // While generation is pending and nothing is suggested yet, re-check on an
+  // interval (focused only, bounded by the polling window).
+  const suggestedCount = lists.suggested.length;
+  useEffect(() => {
+    if (userId === null || !focused || !generating || suggestedCount > 0) return;
+    const timer = setInterval(() => {
+      if (
+        shouldPollSwaps({
+          focused: true,
+          generating: true,
+          suggestedCount: 0,
+          startedAt: pollStartedAtRef.current,
+          now: Date.now(),
+        })
+      ) {
+        void load();
+      }
+    }, SWAP_POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [userId, focused, generating, suggestedCount, load]);
+
   const refresh = useCallback(() => {
+    setRefreshing(true);
+    void load();
+  }, [load]);
+  const retry = useCallback(() => {
     void load();
   }, [load]);
 
@@ -246,6 +303,8 @@ export function useSwaps(): UseSwapsResult {
       saved: withState(lists.saved),
       dismissed: withState(lists.dismissed),
       loading: loading && lists.suggested.length === 0 && lists.saved.length === 0,
+      refreshing,
+      generating,
       error:
         lists.suggested.length === 0 &&
         lists.saved.length === 0 &&
@@ -253,7 +312,7 @@ export function useSwaps(): UseSwapsResult {
           ? error
           : null,
       refresh,
-      retry: refresh,
+      retry,
       save,
       dismiss,
       restore,
@@ -263,8 +322,11 @@ export function useSwaps(): UseSwapsResult {
       withState,
       lists,
       loading,
+      refreshing,
+      generating,
       error,
       refresh,
+      retry,
       save,
       dismiss,
       restore,
