@@ -198,28 +198,30 @@ export default function SwapsScreen() {
           )
         }
         renderItem={({ item: card }) => (
-          <SwapCard
-            swap={card.swap}
-            variant={tab}
-            pending={card.pending}
-            error={card.error}
-            actions={
-              tab === "suggested"
-                ? {
-                    onSave: () => void swaps.save(card.swap.id),
-                    onDismiss: () => void swaps.dismiss(card.swap.id),
-                  }
-                : {
-                    onRestore: () => {
-                      if (tab === "dismissed") {
-                        void swaps.restore(card.swap.id);
-                      } else {
-                        void swaps.unsave(card.swap.id);
-                      }
-                    },
-                  }
-            }
-          />
+          <View style={styles.cardContainer}>
+            <SwapCard
+              swap={card.swap}
+              variant={tab}
+              pending={card.pending}
+              error={card.error}
+              actions={
+                tab === "suggested"
+                  ? {
+                      onSave: () => void swaps.save(card.swap.id),
+                      onDismiss: () => void swaps.dismiss(card.swap.id),
+                    }
+                  : {
+                      onRestore: () => {
+                        if (tab === "dismissed") {
+                          void swaps.restore(card.swap.id);
+                        } else {
+                          void swaps.unsave(card.swap.id);
+                        }
+                      },
+                    }
+              }
+            />
+          </View>
         )}
         ListFooterComponent={
           <Text style={styles.footer}>
@@ -238,13 +240,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
+    alignItems: "stretch",
     padding: 24,
     paddingTop: 16,
     paddingBottom: 32,
     gap: 20,
   },
   header: {
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
     gap: 20,
+  },
+  cardContainer: {
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
   },
   brand: {
     color: colors.primary,
@@ -296,6 +307,9 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   errorCard: {
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
     padding: 20,
     borderRadius: radii.card,
     backgroundColor: colors.surface,
@@ -330,6 +344,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   loadingCard: {
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
     paddingHorizontal: 24,
     paddingVertical: 36,
     borderRadius: radii.card,
@@ -342,6 +359,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   emptyState: {
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
     paddingHorizontal: 24,
     paddingVertical: 36,
     borderRadius: radii.card,
@@ -362,6 +382,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   footer: {
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
     color: colors.muted,
     fontSize: 11,
     lineHeight: 17,

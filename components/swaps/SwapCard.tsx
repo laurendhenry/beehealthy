@@ -18,6 +18,7 @@ import {
 
 import { colors, radii } from "../../constants/app-theme";
 import type { SwapSuggestion, SwapVariant } from "../../types/swaps";
+import { getSwapExplanation, parseSwapStats } from "./swap-stats";
 
 export type SwapCardActions = {
   onSave?: () => void;
@@ -43,32 +44,78 @@ export function SwapCard({
 }: SwapCardProps) {
   const { onSave, onDismiss, onRestore } = actions;
   const suggested = variant === "suggested";
+  const stats = parseSwapStats(swap.benefit, swap.similarity);
+  const explanation = getSwapExplanation(swap);
 
   return (
     <View style={styles.card} testID={`swap-card-${swap.id}`}>
-      <Text style={styles.label}>YOUR ITEM</Text>
-      <Text style={styles.itemName}>{swap.originalItem}</Text>
-
-      <Text style={styles.arrow} accessible={false}>
-        ↓
-      </Text>
-
-      <View style={styles.alternative}>
-        <Text style={styles.label}>TRY INSTEAD</Text>
-        <Text style={styles.itemName}>{swap.suggestedItem}</Text>
+      <View style={styles.swapRow}>
+        <View style={styles.itemColumn}>
+          <Text style={styles.label}>YOURS</Text>
+          <Text numberOfLines={2} style={styles.originalName}>
+            {swap.originalItem}
+          </Text>
+        </View>
+        <Text style={styles.arrow} accessible={false}>
+          →
+        </Text>
+        <View style={[styles.itemColumn, styles.alternative]}>
+          <Text style={styles.label}>TRY INSTEAD</Text>
+          <Text numberOfLines={2} style={styles.itemName}>
+            {swap.suggestedItem}
+          </Text>
+        </View>
       </View>
 
-      {suggested && swap.similarity ? (
-        <View style={styles.explanation}>
-          <Text style={styles.explanationTitle}>Why it fits</Text>
-          <Text style={styles.body}>{swap.similarity}</Text>
+      {suggested && (stats.length > 0 || swap.benefit) ? (
+        <View style={styles.reasonSection}>
+          <Text style={styles.sectionTitle}>Why consider it</Text>
+          {stats.length ? (
+            <View style={styles.statsSection}>
+              <View style={styles.divider} />
+              {stats.map((stat) => {
+                const direction = stat.toValue > stat.fromValue ? "↑" : "↓";
+                return (
+                  <View key={stat.label} style={styles.statRow}>
+                    <Text numberOfLines={1} style={styles.statLabel}>
+                      {stat.label}
+                    </Text>
+                    <Text style={styles.statOldValue}>{stat.from}</Text>
+                    <Text style={styles.statArrow} accessible={false}>
+                      →
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.statNewValue,
+                        stat.improvement && styles.statImproved,
+                      ]}
+                    >
+                      {stat.to}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.statDirection,
+                        stat.improvement && styles.statImproved,
+                      ]}
+                      accessible={false}
+                    >
+                      {direction}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={styles.body}>{swap.benefit}</Text>
+          )}
         </View>
       ) : null}
 
-      {suggested && swap.benefit ? (
-        <View style={styles.explanation}>
-          <Text style={styles.explanationTitle}>Why consider it</Text>
-          <Text style={styles.body}>{swap.benefit}</Text>
+      {suggested && explanation ? (
+        <View style={styles.reasonSection}>
+          <Text style={styles.sectionTitle}>Why it fits</Text>
+          <Text style={styles.body}>{explanation}</Text>
         </View>
       ) : null}
 
@@ -84,6 +131,8 @@ export function SwapCard({
           <Text style={styles.pendingLabel}>Updating…</Text>
         </View>
       ) : null}
+
+      <Text style={styles.caption}>Per 100g · OpenNutrition</Text>
 
       {suggested ? (
         <View style={styles.actions}>
@@ -162,9 +211,23 @@ export function SwapCard({
 
 const styles = StyleSheet.create({
   card: {
+    width: "100%",
+    maxWidth: 480,
     padding: 20,
     borderRadius: radii.card,
     backgroundColor: colors.surface,
+  },
+  swapRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+  },
+  itemColumn: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 10,
   },
   label: {
     color: colors.muted,
@@ -172,29 +235,35 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 1,
   },
+  originalName: {
+    marginTop: 6,
+    color: colors.muted,
+    fontSize: 16,
+    fontWeight: "600",
+    lineHeight: 22,
+  },
   itemName: {
     marginTop: 6,
     color: colors.text,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
-    lineHeight: 25,
+    lineHeight: 22,
   },
   arrow: {
-    marginVertical: 8,
-    marginLeft: 8,
+    alignSelf: "center",
     color: colors.primary,
-    fontSize: 24,
+    fontSize: 18,
   },
   alternative: {
-    padding: 16,
-    borderRadius: 16,
+    padding: 12,
+    borderRadius: 14,
     backgroundColor: colors.paleGreen,
   },
-  explanation: {
+  reasonSection: {
     marginTop: 16,
-    gap: 4,
+    gap: 6,
   },
-  explanationTitle: {
+  sectionTitle: {
     color: colors.primary,
     fontSize: 12,
     fontWeight: "700",
@@ -203,6 +272,53 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     lineHeight: 21,
+  },
+  statsSection: {
+    marginTop: 2,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginBottom: 10,
+    backgroundColor: colors.border,
+  },
+  statRow: {
+    minHeight: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  statLabel: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.text,
+    fontSize: 12,
+    textTransform: "capitalize",
+  },
+  statOldValue: {
+    color: colors.muted,
+    fontSize: 12,
+  },
+  statArrow: {
+    color: colors.muted,
+    fontSize: 12,
+  },
+  statNewValue: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  statDirection: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  statImproved: {
+    color: colors.primary,
+  },
+  caption: {
+    marginTop: 12,
+    color: colors.muted,
+    fontSize: 10,
   },
   error: {
     marginTop: 14,
@@ -221,12 +337,11 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   actions: {
-    marginTop: 20,
+    marginTop: 14,
     flexDirection: "row",
-    flexWrap: "wrap",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 16,
+    gap: 8,
   },
   saveButton: {
     minHeight: 46,
