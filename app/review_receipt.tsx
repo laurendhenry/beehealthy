@@ -56,6 +56,7 @@ export default function ReviewReceiptScreen() {
     canConfirm,
     canSaveDraft,
     confirmFrozen,
+    pendingConfirmStatus,
     validation,
     reopenReceipt,
     refreshImageUrl,
@@ -75,7 +76,6 @@ export default function ReviewReceiptScreen() {
   } = useReceipt();
 
   const [saving, setSaving] = useState(false);
-  const [attempted, setAttempted] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [showPhoto, setShowPhoto] = useState(false);
   const requestedRef = useRef<string | null>(null);
@@ -153,7 +153,6 @@ export default function ReviewReceiptScreen() {
   }
 
   async function handleSave() {
-    setAttempted(true);
     if (!canSaveDraft || saving) {
       return;
     }
@@ -169,7 +168,6 @@ export default function ReviewReceiptScreen() {
   }
 
   async function handleConfirm() {
-    setAttempted(true);
     if (!canConfirm || phase === "confirming") {
       return;
     }
@@ -302,6 +300,14 @@ export default function ReviewReceiptScreen() {
   const editingItem = form.items.find((item) => item.key === editingKey) ?? null;
   const nextToCheck = nextItemNeedingCheck(form.items, editingKey);
   const isReadyDraft = receiptId !== null && resource?.status === "ready";
+  const blockedByReceiptState =
+    validation?.valid === true &&
+    !canSaveDraft &&
+    !canConfirm &&
+    !saving &&
+    phase !== "confirming" &&
+    pendingConfirmStatus === "none" &&
+    !confirmFrozen;
 
   let saveNote = "Not saved until you confirm.";
   if (isReadyDraft) {
@@ -434,7 +440,7 @@ export default function ReviewReceiptScreen() {
             </ReceiptCard>
           ) : null}
 
-          {attempted && issues.length > 0 ? (
+          {issues.length > 0 ? (
             <ReceiptCard>
               <Text style={ui.title}>Check these fields</Text>
               {issues.map((issue) => (
@@ -442,6 +448,21 @@ export default function ReviewReceiptScreen() {
                   {issue.message}
                 </Text>
               ))}
+            </ReceiptCard>
+          ) : null}
+
+          {blockedByReceiptState ? (
+            <ReceiptCard>
+              <Text style={ui.title}>Receipt status needs a refresh</Text>
+              <Text style={ui.muted}>
+                The form passes validation, but this screen cannot verify the saved receipt version.
+                Check its status and try again. If it stays blocked, reopen it from receipt history.
+              </Text>
+              <ReceiptButton
+                title="Check receipt status"
+                secondary
+                onPress={() => void refreshStatus()}
+              />
             </ReceiptCard>
           ) : null}
         </ScrollView>

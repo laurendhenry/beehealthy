@@ -52,7 +52,7 @@ export function SwapCard({
       <View style={styles.swapRow}>
         <View style={styles.itemColumn}>
           <Text style={styles.label}>YOURS</Text>
-          <Text numberOfLines={2} style={styles.originalName}>
+          <Text style={styles.originalName}>
             {swap.originalItem}
           </Text>
         </View>
@@ -61,7 +61,7 @@ export function SwapCard({
         </Text>
         <View style={[styles.itemColumn, styles.alternative]}>
           <Text style={styles.label}>TRY INSTEAD</Text>
-          <Text numberOfLines={2} style={styles.itemName}>
+          <Text style={styles.itemName}>
             {swap.suggestedItem}
           </Text>
         </View>
