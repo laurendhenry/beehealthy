@@ -6,7 +6,7 @@ import { ComponentProps } from "react";
 
 type TabSymbolProps = {
   symbol: ComponentProps<typeof Lucide>["name"];
-  color: string;
+  color: ComponentProps<typeof Lucide>["color"];
   focused: boolean;
 };
 
@@ -67,6 +67,16 @@ export default function TabsLayout() {
           title: "Food swaps",
           tabBarIcon: ({ color, focused }) => (
             <TabSymbol symbol="arrow-left-right" color={color} focused={focused} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="pantry"
+        options={{
+          title: "Pantry",
+          tabBarIcon: ({ color, focused }) => (
+            <TabSymbol symbol="package" color={color} focused={focused} />
           ),
         }}
       />

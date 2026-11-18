@@ -337,14 +337,22 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.surface,
   },
-  pantryLink: {
-    marginTop: 12,
-    alignSelf: "flex-start",
+  pantryLinkButton: {
+    minHeight: 46,
+    marginTop: 16,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radii.button,
+    backgroundColor: colors.primary,
   },
-  pantryLinkText: {
-    fontSize: 12,
+  pantryLinkButtonPressed: {
+    backgroundColor: colors.primaryPressed,
+  },
+  pantryLinkButtonText: {
+    fontSize: 14,
     fontWeight: "700",
-    color: colors.primary,
+    color: colors.surface,
   },
   syncNote: {
     marginTop: 12,

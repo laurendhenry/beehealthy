@@ -27,8 +27,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   usePantry,
   type PantryRowState,
-} from "../hooks/usePantry";
-import { colors, radii } from "../constants/app-theme";
+} from "../../hooks/usePantry";
+import { colors, radii } from "../../constants/app-theme";
 
 export default function PantryScreen() {
   const pantry = usePantry();
@@ -100,12 +100,6 @@ export default function PantryScreen() {
           ListHeaderComponent={
             <View style={styles.header}>
               <View style={styles.topRow}>
-                <View style={styles.brandRow}>
-                  <View style={styles.brandMark}>
-                    <Text style={styles.brandIcon}>♧</Text>
-                  </View>
-                  <Text style={styles.brandName}>sprout</Text>
-                </View>
                 <Pressable
                   onPress={handleBack}
                   hitSlop={10}
@@ -114,6 +108,12 @@ export default function PantryScreen() {
                 >
                   <Text style={styles.backLink}>‹ Back</Text>
                 </Pressable>
+                <View style={styles.brandRow}>
+                  <View style={styles.brandMark}>
+                    <Text style={styles.brandIcon}>♧</Text>
+                  </View>
+                  <Text style={styles.brandName}>sprout</Text>
+                </View>
               </View>
 
               <Text style={styles.heading} accessibilityRole="header">
@@ -147,7 +147,7 @@ export default function PantryScreen() {
             </View>
           }
           ListEmptyComponent={
-            pantry.error ? null : pantry.loading ? (
+            pantry.error ? undefined : pantry.loading ? (
               <View style={styles.loadingCard}>
                 <ActivityIndicator
                   testID="pantry-loading"
@@ -173,7 +173,7 @@ export default function PantryScreen() {
                 <ActivityIndicator size="small" color={colors.primary} />
                 <Text style={styles.footerText}>Loading more…</Text>
               </View>
-            ) : null
+            ) : undefined
           }
           renderItem={({ item: row }) => {
             const isEditing = editingId === row.item.id;

@@ -21,6 +21,7 @@ import {
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAuth } from "../context/AuthContext";
 import { useAppData } from "../context/AppDataContext";
 import {
   ApiError,
@@ -41,11 +42,13 @@ function splitList(value: string): string[] {
 
 export default function ProfileScreen() {
   const { userId, invalidateFor } = useAppData();
+  const { signOut } = useAuth();
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -158,6 +161,23 @@ export default function ProfileScreen() {
     );
   };
 
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      const result = await signOut();
+      if (result.error) {
+        Alert.alert("Sign-out issue", result.error);
+      }
+    } catch (err) {
+      Alert.alert(
+        "Sign-out issue",
+        err instanceof Error ? err.message : "Couldn't sign out. Try again.",
+      );
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
   const handleBack = () => {
     if (router.canGoBack()) {
       router.back();
@@ -182,12 +202,6 @@ export default function ProfileScreen() {
           testID="profile-screen"
         >
           <View style={styles.topRow}>
-            <View style={styles.brandRow}>
-              <View style={styles.brandMark}>
-                <Text style={styles.brandIcon}>♧</Text>
-              </View>
-              <Text style={styles.brandName}>sprout</Text>
-            </View>
             <Pressable
               onPress={handleBack}
               hitSlop={10}
@@ -196,6 +210,12 @@ export default function ProfileScreen() {
             >
               <Text style={styles.backLink}>‹ Back</Text>
             </Pressable>
+            <View style={styles.brandRow}>
+              <View style={styles.brandMark}>
+                <Text style={styles.brandIcon}>♧</Text>
+              </View>
+              <Text style={styles.brandName}>sprout</Text>
+            </View>
           </View>
 
           <Text style={styles.heading} accessibilityRole="header">
@@ -257,6 +277,24 @@ export default function ProfileScreen() {
                     </Text>
                   </View>
                 </View>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.button,
+                    styles.resetButton,
+                    signingOut && styles.disabled,
+                    pressed && !signingOut && styles.pressed,
+                  ]}
+                  disabled={signingOut}
+                  onPress={() => void handleSignOut()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Sign out"
+                  accessibilityState={{ disabled: signingOut, busy: signingOut }}
+                >
+                  <Text style={styles.resetButtonText}>
+                    {signingOut ? "Signing out…" : "Sign out"}
+                  </Text>
+                </Pressable>
               </View>
 
               <View style={styles.card}>

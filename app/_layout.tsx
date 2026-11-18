@@ -84,7 +84,6 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="review_receipt" />
         <Stack.Screen name="receipts" />
-        <Stack.Screen name="pantry" />
         <Stack.Screen name="profile" />
       </Stack.Protected>
       <Stack.Protected guard={bootstrapped && !isAuthenticated}>

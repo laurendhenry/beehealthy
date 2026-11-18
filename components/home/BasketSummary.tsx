@@ -30,10 +30,25 @@ export function BasketSummary({ basket, loading, error }: BasketSummaryProps) {
   const receiptCount = basket?.receiptCount ?? 0;
   const itemCount = basket?.itemCount ?? 0;
 
+  const pantryLink = (
+    <Link href="/pantry" asChild>
+      <Pressable
+        style={({ pressed }) => [
+          styles.pantryLinkButton,
+          pressed && styles.pantryLinkButtonPressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Open pantry"
+      >
+        <Text style={styles.pantryLinkButtonText}>Open pantry →</Text>
+      </Pressable>
+    </Link>
+  );
+
   return (
     <>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>What’s in your basket</Text>
+        <Text style={styles.sectionTitle}>What’s in your pantry</Text>
 
         <Text style={styles.sectionMeta}>
           {receiptCount > 0
@@ -46,7 +61,7 @@ export function BasketSummary({ basket, loading, error }: BasketSummaryProps) {
         {loading ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.loadingText}>Loading your basket…</Text>
+            <Text style={styles.loadingText}>Loading your pantry…</Text>
           </View>
         ) : error ? (
           <View>
@@ -68,19 +83,9 @@ export function BasketSummary({ basket, loading, error }: BasketSummaryProps) {
         ) : categories.length === 0 ? (
           <>
             <Text style={styles.basketFootnote}>
-              Nothing in your basket yet. Scan a receipt and the food you keep
+              Your pantry is empty for now. Scan a receipt and the food you keep
               shows up here.
             </Text>
-
-            <Link href="/pantry" asChild>
-              <Pressable
-                style={styles.pantryLink}
-                accessibilityRole="button"
-                accessibilityLabel="View pantry"
-              >
-                <Text style={styles.pantryLinkText}>Open pantry →</Text>
-              </Pressable>
-            </Link>
           </>
         ) : (
           <>
@@ -109,18 +114,9 @@ export function BasketSummary({ basket, loading, error }: BasketSummaryProps) {
               {itemCount} {itemCount === 1 ? "item" : "items"} available ·
               grouped by food type
             </Text>
-
-            <Link href="/pantry" asChild>
-              <Pressable
-                style={styles.pantryLink}
-                accessibilityRole="button"
-                accessibilityLabel="View pantry"
-              >
-                <Text style={styles.pantryLinkText}>Open pantry →</Text>
-              </Pressable>
-            </Link>
           </>
         )}
+        {pantryLink}
       </View>
     </>
   );
