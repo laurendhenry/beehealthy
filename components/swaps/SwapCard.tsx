@@ -52,168 +52,188 @@ export function SwapCard({
   const explanation = getSwapExplanation(swap);
 
   return (
-    <View style={styles.card} testID={`swap-card-${swap.id}`}>
-      <View style={styles.swapRow}>
-        <View style={styles.itemColumn}>
-          <Text style={styles.label}>YOURS</Text>
-          <Text style={styles.originalName}>
-            {swap.originalItem}
+    <View
+      style={[
+        styles.cardStack,
+        suggested && relatedCount > 0 && styles.cardStackWithRelated,
+      ]}
+      testID={`swap-card-${swap.id}`}
+    >
+      {suggested && relatedCount > 0 ? (
+        <>
+          <View
+            pointerEvents="none"
+            style={styles.stackLayerRear}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          />
+          <View
+            pointerEvents="none"
+            style={styles.stackLayerFront}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          />
+        </>
+      ) : null}
+      <View style={styles.card}>
+        <View style={styles.swapRow}>
+          <View style={styles.itemColumn}>
+            <Text style={styles.label}>YOURS</Text>
+            <Text style={styles.originalName}>{swap.originalItem}</Text>
+          </View>
+          <Text style={styles.arrow} accessible={false}>
+            →
           </Text>
+          <View style={[styles.itemColumn, styles.alternative]}>
+            <Text style={styles.label}>TRY INSTEAD</Text>
+            <Text style={styles.itemName}>{swap.suggestedItem}</Text>
+          </View>
         </View>
-        <Text style={styles.arrow} accessible={false}>
-          →
-        </Text>
-        <View style={[styles.itemColumn, styles.alternative]}>
-          <Text style={styles.label}>TRY INSTEAD</Text>
-          <Text style={styles.itemName}>
-            {swap.suggestedItem}
+
+        {suggested && (stats.length > 0 || swap.benefit) ? (
+          <View style={styles.reasonSection}>
+            <Text style={styles.sectionTitle}>Why consider it</Text>
+            {stats.length ? (
+              <View style={styles.statsSection}>
+                <View style={styles.divider} />
+                {stats.map((stat) => {
+                  const direction = stat.toValue > stat.fromValue ? "↑" : "↓";
+                  return (
+                    <View key={stat.label} style={styles.statRow}>
+                      <Text numberOfLines={1} style={styles.statLabel}>
+                        {stat.label}
+                      </Text>
+                      <Text style={styles.statOldValue}>{stat.from}</Text>
+                      <Text style={styles.statArrow} accessible={false}>
+                        →
+                      </Text>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.statNewValue,
+                          stat.improvement && styles.statImproved,
+                        ]}
+                      >
+                        {stat.to}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.statDirection,
+                          stat.improvement && styles.statImproved,
+                        ]}
+                        accessible={false}
+                      >
+                        {direction}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={styles.body}>{swap.benefit}</Text>
+            )}
+          </View>
+        ) : null}
+
+        {suggested && explanation ? (
+          <View style={styles.reasonSection}>
+            <Text style={styles.sectionTitle}>Why it fits</Text>
+            <Text style={styles.body}>{explanation}</Text>
+          </View>
+        ) : null}
+
+        {error ? (
+          <Text style={styles.error} role="alert">
+            {error}
           </Text>
-        </View>
+        ) : null}
+
+        {pending ? (
+          <View style={styles.pendingRow} testID={`swap-pending-${swap.id}`}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.pendingLabel}>Updating…</Text>
+          </View>
+        ) : null}
+
+        <Text style={styles.caption}>Per 100g · OpenNutrition</Text>
+
+        {suggested ? (
+          <View style={styles.actions}>
+            {onSave ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Save swap to ${swap.suggestedItem}`}
+                accessibilityState={{ disabled: pending, busy: pending }}
+                disabled={pending}
+                onPress={onSave}
+                style={({ pressed }) => [
+                  styles.saveButton,
+                  pressed && styles.pressed,
+                  pending && styles.disabled,
+                ]}
+              >
+                <Text style={styles.saveButtonLabel}>Save swap</Text>
+              </Pressable>
+            ) : null}
+
+            {onDismiss ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Dismiss swap for ${swap.originalItem}`}
+                accessibilityState={{ disabled: pending, busy: pending }}
+                disabled={pending}
+                onPress={onDismiss}
+                style={[styles.textButton, pending && styles.disabled]}
+              >
+                <Text style={styles.textButtonLabel}>Dismiss</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : variant === "saved" ? (
+          <View style={styles.actions}>
+            <Text style={styles.savedLabel}>✓ Saved</Text>
+
+            {onRestore ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${swap.suggestedItem} from saved`}
+                accessibilityState={{ disabled: pending, busy: pending }}
+                disabled={pending}
+                onPress={onRestore}
+                style={[styles.textButton, pending && styles.disabled]}
+              >
+                <Text style={styles.textButtonLabel}>Remove</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
+          <View style={styles.actions}>
+            <Text style={styles.dismissedLabel}>Dismissed</Text>
+
+            {onRestore ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Restore swap to ${swap.suggestedItem}`}
+                accessibilityState={{ disabled: pending, busy: pending }}
+                disabled={pending}
+                onPress={onRestore}
+                style={({ pressed }) => [
+                  styles.restoreButton,
+                  pressed && styles.pressed,
+                  pending && styles.disabled,
+                ]}
+              >
+                <Text style={styles.restoreButtonLabel}>Restore</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        )}
       </View>
-
-      {suggested && (stats.length > 0 || swap.benefit) ? (
-        <View style={styles.reasonSection}>
-          <Text style={styles.sectionTitle}>Why consider it</Text>
-          {stats.length ? (
-            <View style={styles.statsSection}>
-              <View style={styles.divider} />
-              {stats.map((stat) => {
-                const direction = stat.toValue > stat.fromValue ? "↑" : "↓";
-                return (
-                  <View key={stat.label} style={styles.statRow}>
-                    <Text numberOfLines={1} style={styles.statLabel}>
-                      {stat.label}
-                    </Text>
-                    <Text style={styles.statOldValue}>{stat.from}</Text>
-                    <Text style={styles.statArrow} accessible={false}>
-                      →
-                    </Text>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.statNewValue,
-                        stat.improvement && styles.statImproved,
-                      ]}
-                    >
-                      {stat.to}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.statDirection,
-                        stat.improvement && styles.statImproved,
-                      ]}
-                      accessible={false}
-                    >
-                      {direction}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          ) : (
-            <Text style={styles.body}>{swap.benefit}</Text>
-          )}
-        </View>
-      ) : null}
-
-      {suggested && explanation ? (
-        <View style={styles.reasonSection}>
-          <Text style={styles.sectionTitle}>Why it fits</Text>
-          <Text style={styles.body}>{explanation}</Text>
-        </View>
-      ) : null}
-
-      {error ? (
-        <Text style={styles.error} role="alert">
-          {error}
-        </Text>
-      ) : null}
-
-      {pending ? (
-        <View style={styles.pendingRow} testID={`swap-pending-${swap.id}`}>
-          <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={styles.pendingLabel}>Updating…</Text>
-        </View>
-      ) : null}
-
-      <Text style={styles.caption}>Per 100g · OpenNutrition</Text>
-
-      {suggested ? (
-        <View style={styles.actions}>
-          {onSave ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Save swap to ${swap.suggestedItem}`}
-              accessibilityState={{ disabled: pending, busy: pending }}
-              disabled={pending}
-              onPress={onSave}
-              style={({ pressed }) => [
-                styles.saveButton,
-                pressed && styles.pressed,
-                pending && styles.disabled,
-              ]}
-            >
-              <Text style={styles.saveButtonLabel}>Save swap</Text>
-            </Pressable>
-          ) : null}
-
-          {onDismiss ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Dismiss swap for ${swap.originalItem}`}
-              accessibilityState={{ disabled: pending, busy: pending }}
-              disabled={pending}
-              onPress={onDismiss}
-              style={[styles.textButton, pending && styles.disabled]}
-            >
-              <Text style={styles.textButtonLabel}>Dismiss</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : variant === "saved" ? (
-        <View style={styles.actions}>
-          <Text style={styles.savedLabel}>✓ Saved</Text>
-
-          {onRestore ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Remove ${swap.suggestedItem} from saved`}
-              accessibilityState={{ disabled: pending, busy: pending }}
-              disabled={pending}
-              onPress={onRestore}
-              style={[styles.textButton, pending && styles.disabled]}
-            >
-              <Text style={styles.textButtonLabel}>Remove</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : (
-        <View style={styles.actions}>
-          <Text style={styles.dismissedLabel}>Dismissed</Text>
-
-          {onRestore ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Restore swap to ${swap.suggestedItem}`}
-              accessibilityState={{ disabled: pending, busy: pending }}
-              disabled={pending}
-              onPress={onRestore}
-              style={({ pressed }) => [
-                styles.restoreButton,
-                pressed && styles.pressed,
-                pending && styles.disabled,
-              ]}
-            >
-              <Text style={styles.restoreButtonLabel}>Restore</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      )}
 
       {suggested && relatedCount > 0 && onShowRelated ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`See ${relatedCount} more swaps for ${swap.originalItem}`}
+          accessibilityLabel={`See ${relatedCount} more swaps`}
           onPress={onShowRelated}
           style={({ pressed }) => [
             styles.relatedButton,
@@ -221,7 +241,7 @@ export function SwapCard({
           ]}
         >
           <Text style={styles.relatedButtonLabel}>
-            See {relatedCount} more for {swap.originalItem} →
+            See {relatedCount} more swaps →
           </Text>
         </Pressable>
       ) : null}
@@ -236,6 +256,32 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: radii.card,
     backgroundColor: colors.surface,
+  },
+  cardStack: {
+    position: "relative",
+    width: "100%",
+    maxWidth: 480,
+  },
+  cardStackWithRelated: {
+    paddingBottom: 44,
+  },
+  stackLayerRear: {
+    position: "absolute",
+    top: 14,
+    left: 14,
+    right: 14,
+    bottom: 0,
+    borderRadius: radii.card,
+    backgroundColor: "#E6EBDD",
+  },
+  stackLayerFront: {
+    position: "absolute",
+    top: 7,
+    left: 7,
+    right: 7,
+    bottom: 5,
+    borderRadius: radii.card,
+    backgroundColor: "#EEF1E9",
   },
   swapRow: {
     flexDirection: "row",
@@ -284,10 +330,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   relatedButton: {
-    alignSelf: "flex-start",
-    minHeight: 40,
-    marginTop: 10,
+    position: "absolute",
+    left: 18,
+    right: 18,
+    bottom: 0,
+    zIndex: 3,
+    minHeight: 44,
     justifyContent: "center",
+    alignItems: "center",
   },
   relatedButtonLabel: {
     color: colors.primary,

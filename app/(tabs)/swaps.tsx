@@ -106,8 +106,9 @@ export default function SwapsScreen() {
   const renderSwapCard = (card: SwapCardState) => {
     const related =
       suggestionSections.byOriginalItem.get(card.swap.originalItem) ?? [];
+    const isFirstForFood = related[0]?.id === card.swap.id;
     const relatedCount =
-      tab === "suggested" && selectedFood === null
+      tab === "suggested" && selectedFood === null && isFirstForFood
         ? Math.max(0, related.length - 1)
         : 0;
     return (
