@@ -100,7 +100,7 @@ export function useSwaps(): UseSwapsResult {
     setError(null);
     try {
       const [suggestions, saved, dismissed] = await Promise.all([
-        getSwapSuggestions({ signal: controller.signal }),
+        getSwapSuggestions({ limit: 100, signal: controller.signal }),
         listSwaps("saved", controller.signal),
         listSwaps("dismissed", controller.signal),
       ]);

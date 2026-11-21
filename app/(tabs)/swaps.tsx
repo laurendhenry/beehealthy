@@ -1,7 +1,6 @@
 /**
  * Swaps tab: suggested / saved / dismissed lists with per-card
- * save/dismiss/restore and rollback. No bulk restore — dismissed cards are
- * restored individually.
+ * save/dismiss/restore and rollback.
  *
  * Data, optimistic updates, and rollback come from useSwaps (real server
  * reads only — no mocks). This file owns presentation only. Cards render
@@ -22,8 +21,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useSwaps } from "../../hooks/useSwaps";
+import { useSwaps, type SwapCardState } from "../../hooks/useSwaps";
 import { SwapCard } from "../../components/swaps/SwapCard";
+import { organizeSuggestedSwaps } from "../../components/swaps/swap-list";
 import { colors, radii } from "../../constants/app-theme";
 import type { SwapTab } from "../../types/swaps";
 
@@ -66,6 +66,7 @@ const EMPTY_COPY: Record<SwapTab, { title: string; description: string }> = {
 export default function SwapsScreen() {
   const swaps = useSwaps();
   const [tab, setTab] = useState<SwapTab>("suggested");
+  const [selectedFood, setSelectedFood] = useState<string | null>(null);
 
   const list =
     tab === "suggested"
@@ -73,6 +74,17 @@ export default function SwapsScreen() {
       : tab === "saved"
         ? swaps.saved
         : swaps.dismissed;
+  const suggestionSections = organizeSuggestedSwaps(
+    swaps.suggested.map((card) => card.swap),
+  );
+  const relatedCards =
+    selectedFood === null
+      ? []
+      : swaps.suggested.filter(
+          (card) => card.swap.originalItem === selectedFood,
+        );
+  const visibleList =
+    tab === "suggested" && selectedFood !== null ? relatedCards : list;
 
   const counts: Record<SwapTab, number> = {
     suggested: swaps.suggested.length,
@@ -87,6 +99,47 @@ export default function SwapsScreen() {
     emptyCopy = NO_SWAPS_COPY;
   }
 
+  const showRelatedSwaps = (originalItem: string) => {
+    setSelectedFood(originalItem);
+  };
+
+  const renderSwapCard = (card: SwapCardState) => {
+    const related =
+      suggestionSections.byOriginalItem.get(card.swap.originalItem) ?? [];
+    const relatedCount =
+      tab === "suggested" && selectedFood === null
+        ? Math.max(0, related.length - 1)
+        : 0;
+    return (
+      <View style={styles.cardContainer}>
+        <SwapCard
+          swap={card.swap}
+          variant={tab}
+          relatedCount={relatedCount}
+          onShowRelated={() => showRelatedSwaps(card.swap.originalItem)}
+          pending={card.pending}
+          error={card.error}
+          actions={
+            tab === "suggested"
+              ? {
+                  onSave: () => void swaps.save(card.swap.id),
+                  onDismiss: () => void swaps.dismiss(card.swap.id),
+                }
+              : {
+                  onRestore: () => {
+                    if (tab === "dismissed") {
+                      void swaps.restore(card.swap.id);
+                    } else {
+                      void swaps.unsave(card.swap.id);
+                    }
+                  },
+                }
+          }
+        />
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView
       style={styles.page}
@@ -94,9 +147,9 @@ export default function SwapsScreen() {
       testID="swaps-screen"
     >
       <FlatList
-        data={list}
+        data={visibleList}
         keyExtractor={(card) => card.swap.id}
-        extraData={tab}
+        extraData={`${tab}:${selectedFood ?? ""}`}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -129,7 +182,10 @@ export default function SwapsScreen() {
                     accessibilityRole="tab"
                     accessibilityState={{ selected }}
                     accessibilityLabel={`${entry.label} swaps (${counts[entry.id]})`}
-                    onPress={() => setTab(entry.id)}
+                    onPress={() => {
+                      setTab(entry.id);
+                      setSelectedFood(null);
+                    }}
                     style={[styles.tab, selected && styles.activeTab]}
                   >
                     <Text
@@ -174,6 +230,28 @@ export default function SwapsScreen() {
                 </Pressable>
               </View>
             ) : null}
+
+            {tab === "suggested" && selectedFood !== null ? (
+              <View style={styles.relatedHeader}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to suggested swaps"
+                  onPress={() => setSelectedFood(null)}
+                  style={({ pressed }) => [
+                    styles.backToSuggested,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.backToSuggestedLabel}>‹ All swaps</Text>
+                </Pressable>
+                <Text style={styles.relatedHeading}>
+                  More swaps for {selectedFood}
+                </Text>
+                <Text style={styles.relatedDescription}>
+                  Compare other suggestions for this pantry food.
+                </Text>
+              </View>
+            ) : null}
           </View>
         }
         ListEmptyComponent={
@@ -182,7 +260,27 @@ export default function SwapsScreen() {
               <ActivityIndicator color={colors.primary} />
               <Text style={styles.loadingLabel}>Finding swaps…</Text>
             </View>
-          ) : swaps.error ? null : (
+          ) : swaps.error ? undefined : tab === "suggested" &&
+            selectedFood !== null ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>
+                No more swaps for {selectedFood}.
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to suggested swaps"
+                onPress={() => setSelectedFood(null)}
+                style={({ pressed }) => [
+                  styles.backToSuggested,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.backToSuggestedLabel}>
+                  Back to suggested swaps
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
             // Error cards render above regardless of data; this only avoids a
             // misleading “all caught up” placeholder when the load failed.
             <View style={styles.emptyState}>
@@ -197,37 +295,14 @@ export default function SwapsScreen() {
             </View>
           )
         }
-        renderItem={({ item: card }) => (
-          <View style={styles.cardContainer}>
-            <SwapCard
-              swap={card.swap}
-              variant={tab}
-              pending={card.pending}
-              error={card.error}
-              actions={
-                tab === "suggested"
-                  ? {
-                      onSave: () => void swaps.save(card.swap.id),
-                      onDismiss: () => void swaps.dismiss(card.swap.id),
-                    }
-                  : {
-                      onRestore: () => {
-                        if (tab === "dismissed") {
-                          void swaps.restore(card.swap.id);
-                        } else {
-                          void swaps.unsave(card.swap.id);
-                        }
-                      },
-                    }
-              }
-            />
-          </View>
-        )}
+        renderItem={({ item: card }) => renderSwapCard(card)}
         ListFooterComponent={
-          <Text style={styles.footer}>
-            Saved and dismissed swaps stay with your account. Restore a dismissed
-            swap to see it in Suggested again.
-          </Text>
+          tab === "suggested" ? undefined : (
+            <Text style={styles.footer}>
+              Saved and dismissed swaps stay with your account. Restore a dismissed
+              swap to see it in Suggested again.
+            </Text>
+          )
         }
       />
     </SafeAreaView>
@@ -251,6 +326,35 @@ const styles = StyleSheet.create({
     maxWidth: 480,
     alignSelf: "center",
     gap: 20,
+  },
+  pressed: {
+    opacity: 0.75,
+  },
+  relatedHeader: {
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
+    gap: 8,
+  },
+  backToSuggested: {
+    alignSelf: "flex-start",
+    minHeight: 40,
+    justifyContent: "center",
+  },
+  backToSuggestedLabel: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  relatedHeading: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  relatedDescription: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 19,
   },
   cardContainer: {
     width: "100%",

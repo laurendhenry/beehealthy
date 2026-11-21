@@ -30,6 +30,8 @@ export type SwapCardActions = {
 type SwapCardProps = {
   swap: SwapSuggestion;
   variant: SwapVariant;
+  relatedCount?: number;
+  onShowRelated?: () => void;
   pending?: boolean;
   error?: string | null;
   actions?: SwapCardActions;
@@ -38,6 +40,8 @@ type SwapCardProps = {
 export function SwapCard({
   swap,
   variant,
+  relatedCount = 0,
+  onShowRelated,
   pending = false,
   error = null,
   actions = {},
@@ -205,6 +209,22 @@ export function SwapCard({
           ) : null}
         </View>
       )}
+
+      {suggested && relatedCount > 0 && onShowRelated ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`See ${relatedCount} more swaps for ${swap.originalItem}`}
+          onPress={onShowRelated}
+          style={({ pressed }) => [
+            styles.relatedButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.relatedButtonLabel}>
+            See {relatedCount} more for {swap.originalItem} →
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -262,6 +282,17 @@ const styles = StyleSheet.create({
   reasonSection: {
     marginTop: 16,
     gap: 6,
+  },
+  relatedButton: {
+    alignSelf: "flex-start",
+    minHeight: 40,
+    marginTop: 10,
+    justifyContent: "center",
+  },
+  relatedButtonLabel: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: "700",
   },
   sectionTitle: {
     color: colors.primary,

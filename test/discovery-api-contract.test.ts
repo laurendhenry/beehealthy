@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 
-// Offline: fetch is stubbed below and the origin is a dummy HTTPS host.
-process.env.EXPO_PUBLIC_API_ORIGIN = "https://api.test.example";
-
 import { ApiError } from "../lib/api/pantry";
+import { organizeSuggestedSwaps } from "../components/swaps/swap-list";
 import {
   getSwapSuggestions,
   resolveFood,
   searchFoodOptions,
   suggestSwaps,
 } from "../lib/api/discovery";
+
+// Offline: fetch is stubbed below and the origin is a dummy HTTPS host.
+process.env.EXPO_PUBLIC_API_ORIGIN = "https://api.test.example";
 
 type Call = { url: string; init: RequestInit };
 const calls: Call[] = [];
@@ -86,9 +87,56 @@ describe("swap suggestions", () => {
   it("reports whether generation is still pending", async () => {
     respond = () => json({ items: [], generating: true });
     assert.deepEqual(await getSwapSuggestions(), { items: [], generating: true });
+    assert.equal(
+      new URL(calls[calls.length - 1].url).searchParams.get("limit"),
+      "20",
+    );
     respond = () => json({ items: [swap] });
     const older = await getSwapSuggestions();
     assert.equal(older.generating, false);
     assert.equal((await suggestSwaps()).length, 1);
+  });
+
+  it("supports loading the maximum suggestion set for More swaps", async () => {
+    respond = () => json({ items: [swap] });
+
+    await getSwapSuggestions({ limit: 100 });
+
+    assert.equal(new URL(calls[0].url).searchParams.get("limit"), "100");
+  });
+
+  it("keeps the top suggestion, remaining order, and same-food alternatives", () => {
+    const ranked = [
+      { ...swap, id: "butter-best" },
+      {
+        ...swap,
+        id: "milk-best",
+        originalItem: "Milk",
+        suggestedItem: "Soy drink",
+      },
+      {
+        ...swap,
+        id: "butter-next",
+        suggestedItem: "Avocado spread",
+      },
+    ];
+
+    const sections = organizeSuggestedSwaps(ranked);
+
+    assert.equal(sections.featured?.id, "butter-best");
+    assert.deepEqual(sections.more.map(({ id }) => id), [
+      "milk-best",
+      "butter-next",
+    ]);
+    assert.deepEqual(
+      sections.byOriginalItem.get("Butter")?.map(({ id }) => id),
+      ["butter-best", "butter-next"],
+    );
+    assert.deepEqual(
+      organizeSuggestedSwaps(ranked.slice(1)).byOriginalItem
+        .get("Butter")
+        ?.map(({ id }) => id),
+      ["butter-next"],
+    );
   });
 });
